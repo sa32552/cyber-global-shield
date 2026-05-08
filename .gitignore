@@ -1,9 +1,54 @@
-node_modules
-.next
-dist
-coverage
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Environment
 .env
-.env.*
-!.env.example
-npm-debug.log*
+.env.local
+.env.production
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+.next/
+dist/
+
+# Data
+data/*.npy
+data/*.csv
+data/*.pkl
+
+# Logs
+*.log
+logs/
+
+# Docker
+.docker/
+
+# ML Models
+*.pt
+*.pth
+*.h5
+*.joblib
+models/
+
+# Backups
+backups/
