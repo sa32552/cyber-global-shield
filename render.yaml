@@ -2,11 +2,13 @@ services:
   # ─── API FastAPI principale ──────────────────────────────────────────────
   - type: web
     name: cyber-global-shield-api
-    runtime: docker
+    runtime: python
     region: frankfurt
     plan: free
     branch: main
-    dockerfilePath: ./Cyber Global Shield/Dockerfile
+    rootDir: Cyber Global Shield
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /health
     envVars:
       - key: ENVIRONMENT
