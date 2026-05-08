@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum IncidentStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+}
+
+enum ActionType {
+  ROLLBACK
+  SCALE
+  FIX
+  NOTIFY
+}
+
+enum ActionStatus {
+  PENDING
+  RECOMMENDED
+  EXECUTED
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  projects     Project[] @relation("ProjectMembers")
+}
+
+model Project {
+  id                    String         @id @default(uuid())
+  name                  String
+  slug                  String         @unique
+  avgOrderValue         Decimal        @default(120)
+  conversionRate        Decimal        @default(0.035)
+  revenuePerRequest     Decimal        @default(4.20)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  users                 User[]         @relation("ProjectMembers")
+  services              Service[]
+  logs                  Log[]
+  incidents             Incident[]
+  integrations          Integration[]
+}
+
+model Service {
+  id              String     @id @default(uuid())
+  projectId       String
+  name            String
+  environment     String     @default("production")
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  project         Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  logs            Log[]
+  incidents       Incident[]
+
+  @@unique([projectId, name])
+}
+
+model Log {
+  id              String     @id @default(uuid())
+  projectId       String
+  serviceId       String?
+  type            String
+  externalId      String?
+  fingerprint     String?
+  timestamp       DateTime
+  message         String
+  metadata        Json
+  createdAt       DateTime   @default(now())
+  project         Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  service         Service?   @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  incidents       IncidentLog[]
+  incidentGroupId String?
+  incidentGroup   IncidentGroup? @relation(fields: [incidentGroupId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, timestamp])
+  @@index([serviceId, timestamp])
+  @@index([fingerprint])
+}
+
+model IncidentGroup {
+  id               String     @id @default(uuid())
+  projectId        String
+  serviceId        String?
+  clusterKey       String
+  title            String
+  status           IncidentStatus @default(OPEN)
+  firstSeenAt      DateTime
+  lastSeenAt       DateTime
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  project          Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  service          Service?   @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  logs             Log[]
+  incidents        Incident[]
+
+  @@unique([projectId, clusterKey])
+}
+
+model Incident {
+  id               String          @id @default(uuid())
+  projectId        String
+  serviceId        String?
+  incidentGroupId  String?
+  title            String
+  status           IncidentStatus  @default(OPEN)
+  severityScore    Int
+  errorRate        Float
+  affectedRequests Int
+  failedRequests   Int             @default(0)
+  businessLossUsd  Decimal         @default(0)
+  startTime        DateTime
+  endTime          DateTime?
+  source           String          @default("mvp-rule-engine")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  project          Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  service          Service?        @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  incidentGroup    IncidentGroup?  @relation(fields: [incidentGroupId], references: [id], onDelete: SetNull)
+  logs             IncidentLog[]
+  analyses         AIAnalysis[]
+  actions          Action[]
+
+  @@index([projectId, status])
+  @@index([serviceId, startTime])
+}
+
+model IncidentLog {
+  incidentId       String
+  logId            String
+  incident         Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  log              Log      @relation(fields: [logId], references: [id], onDelete: Cascade)
+
+  @@id([incidentId, logId])
+}
+
+model AIAnalysis {
+  id               String    @id @default(uuid())
+  incidentId       String
+  rootCause        String
+  businessImpactUsd Decimal
+  severity         Int
+  explanation      String
+  recommendedActions Json
+  evidence         Json?
+  confidence       Float?
+  promptVersion    String    @default("v1")
+  model            String    @default("gpt-5.4-mini")
+  createdAt        DateTime  @default(now())
+  incident         Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId, createdAt])
+}
+
+model Action {
+  id               String       @id @default(uuid())
+  incidentId       String
+  type             ActionType
+  title            String
+  description      String?
+  status           ActionStatus @default(RECOMMENDED)
+  executedAt       DateTime?
+  createdAt        DateTime     @default(now())
+  incident         Incident     @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+}
+
+model Integration {
+  id               String   @id @default(uuid())
+  projectId        String
+  provider         String
+  config           Json
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, provider])
+}

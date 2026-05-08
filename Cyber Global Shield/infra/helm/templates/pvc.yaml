@@ -1,0 +1,47 @@
+{{- if .Values.persistence.data.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cgs-data
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.data.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.data.size }}
+  storageClassName: {{ .Values.persistence.data.storageClass }}
+{{- end }}
+{{- if .Values.persistence.models.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cgs-models
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.models.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.models.size }}
+  storageClassName: {{ .Values.persistence.models.storageClass }}
+{{- end }}
+{{- if .Values.persistence.backups.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cgs-backups
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.backups.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.backups.size }}
+  storageClassName: {{ .Values.persistence.backups.storageClass }}
+{{- end }}

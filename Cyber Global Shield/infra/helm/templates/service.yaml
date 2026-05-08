@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cgs.fullname" . }}
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.app.service.annotations | nindent 4 }}
+spec:
+  type: {{ .Values.app.service.type }}
+  ports:
+    - port: {{ .Values.app.service.port }}
+      targetPort: {{ .Values.app.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "cgs.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cgs.fullname" . }}-ml
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ml
+spec:
+  type: {{ .Values.ml.service.type }}
+  ports:
+    - port: {{ .Values.ml.service.port }}
+      targetPort: {{ .Values.ml.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "cgs.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cgs.fullname" . }}-soar
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: soar
+spec:
+  type: {{ .Values.soar.service.type }}
+  ports:
+    - port: {{ .Values.soar.service.port }}
+      targetPort: {{ .Values.soar.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "cgs.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: soar
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cgs.fullname" . }}-fl
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fl
+spec:
+  type: {{ .Values.fl.service.type }}
+  ports:
+    - port: {{ .Values.fl.service.port }}
+      targetPort: {{ .Values.fl.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "cgs.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: fl

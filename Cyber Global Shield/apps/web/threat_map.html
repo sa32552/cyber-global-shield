@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Global Shield — Carte des Menaces</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg: #0a0e17;
+            --panel: #111827;
+            --border: #1f2937;
+            --text: #e5e7eb;
+            --muted: #9ca3af;
+            --accent: #3b82f6;
+            --critical: #ef4444;
+            --high: #f97316;
+            --medium: #eab308;
+            --low: #22c55e;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .layout { display: flex; height: 100vh; }
+        .sidebar {
+            width: 240px; background: var(--panel); border-right: 1px solid var(--border);
+            padding: 20px 0; display: flex; flex-direction: column;
+        }
+        .sidebar .logo { padding: 0 20px 20px; border-bottom: 1px solid var(--border); }
+        .sidebar .logo h1 { font-size: 16px; color: var(--accent); }
+        .sidebar .logo span { font-size: 11px; color: var(--muted); }
+        .sidebar nav { flex: 1; padding: 12px 0; }
+        .sidebar nav a {
+            display: flex; align-items: center; gap: 10px; padding: 10px 20px;
+            color: var(--muted); text-decoration: none; font-size: 14px; transition: .2s;
+        }
+        .sidebar nav a:hover, .sidebar nav a.active { color: var(--text); background: rgba(255,255,255,0.05); }
+        .main { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; }
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+        }
+        .header h2 { font-size: 20px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .status-dot.online { background: var(--low); box-shadow: 0 0 6px var(--low); }
+        .flex-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .btn {
+            padding: 8px 16px; border-radius: 6px; border: none; font-size: 13px;
+            cursor: pointer; transition: .2s; font-weight: 600;
+        }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        .btn-outline:hover { background: rgba(255,255,255,0.05); }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: #2563eb; }
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px;
+            font-weight: 600; text-transform: uppercase;
+        }
+        .badge.critical { background: rgba(239,68,68,.2); color: var(--critical); }
+        .badge.high { background: rgba(249,115,22,.2); color: var(--high); }
+        .badge.medium { background: rgba(234,179,8,.2); color: var(--medium); }
+        .badge.low { background: rgba(34,197,94,.2); color: var(--low); }
+        #map-container {
+            flex: 1; border-radius: 10px; overflow: hidden;
+            border: 1px solid var(--border); position: relative;
+            min-height: 500px;
+        }
+        #map { width: 100%; height: 100%; min-height: 500px; }
+        .map-stats {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr));
+            gap: 12px; margin-bottom: 16px;
+        }
+        .stat-card {
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: 8px; padding: 16px;
+        }
+        .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+        .stat-card .value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+        .stat-card .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+        .panel {
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: 10px; padding: 16px; margin-top: 16px;
+        }
+        .panel h3 { font-size: 13px; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 8px; font-size: 12px; }
+        th { color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+        td { border-bottom: 1px solid var(--border); }
+        .loading { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .leaflet-popup-content-wrapper { background: var(--panel) !important; color: var(--text) !important; border: 1px solid var(--border) !important; }
+        .leaflet-popup-tip { background: var(--panel) !important; }
+        .legend {
+            background: var(--panel); padding: 10px 14px; border-radius: 8px;
+            border: 1px solid var(--border); font-size: 12px; line-height: 1.8;
+        }
+        .legend i { width: 12px; height: 12px; display: inline-block; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+        select, input {
+            background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+            padding: 8px 12px; color: var(--text); font-size: 13px;
+        }
+        .toast {
+            position: fixed; bottom: 20px; right: 20px; background: var(--panel);
+            border: 1px solid var(--border); border-radius: 8px; padding: 12px 20px;
+            font-size: 13px; z-index: 10000; animation: slideIn .3s;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="logo">
+                <h1>🛡️ Cyber Global Shield</h1>
+                <span>v2.0 — Threat Map</span>
+            </div>
+            <nav>
+                <a href="index.html">📊 Dashboard</a>
+                <a href="#" class="active">🌍 Carte des Menaces</a>
+            </nav>
+            <div style="margin-top:auto; padding: 20px; border-top: 1px solid var(--border);">
+                <div style="font-size:12px; color:var(--muted);">
+                    <span class="status-dot online"></span> Live
+                </div>
+                <div style="font-size:10px; color:var(--info); margin-top:4px;" id="api-status">Leaflet + OSM</div>
+            </div>
+        </aside>
+
+        <main class="main">
+            <div class="header">
+                <div class="flex-row">
+                    <h2>🌍 Carte des Menaces en Temps Réel</h2>
+                    <span style="font-size:12px; color:var(--muted);" id="last-refresh">—</span>
+                </div>
+                <div class="flex-row">
+                    <select id="time-filter" onchange="refreshMap()">
+                        <option value="1">Dernière heure</option>
+                        <option value="6" selected>6 dernières heures</option>
+                        <option value="24">24 dernières heures</option>
+                        <option value="168">7 derniers jours</option>
+                    </select>
+                    <select id="severity-filter" onchange="refreshMap()">
+                        <option value="">Toutes sévérités</option>
+                        <option value="critical">Critique</option>
+                        <option value="high">Haute</option>
+                        <option value="medium">Moyenne</option>
+                    </select>
+                    <button class="btn btn-outline" onclick="refreshMap()">🔄 Rafraîchir</button>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="map-stats" id="map-stats">
+                <div class="stat-card">
+                    <div class="label">IPs Malveillantes</div>
+                    <div class="value" id="stat-total">—</div>
+                    <div class="sub">période sélectionnée</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Pays Touchés</div>
+                    <div class="value" id="stat-countries">—</div>
+                    <div class="sub">sources d'attaques</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Critiques</div>
+                    <div class="value" style="color:var(--critical)" id="stat-critical">—</div>
+                    <div class="sub">nécessitent action immédiate</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Types d'Attaque</div>
+                    <div class="value" id="stat-types">—</div>
+                    <div class="sub">catégories distinctes</div>
+                </div>
+            </div>
+
+            <!-- Map -->
+            <div id="map-container">
+                <div id="map"></div>
+            </div>
+
+            <!-- Bottom Panel -->
+            <div class="panel">
+                <div class="flex-row" style="justify-content:space-between; margin-bottom:12px;">
+                    <h3>Dernières IPs Malveillantes</h3>
+                    <span style="font-size:11px; color:var(--muted);" id="attack-count">0 attaques</span>
+                </div>
+                <div id="attacks-table"><div class="loading">Chargement...</div></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        // ============ Configuration ============
+        const API_BASE = 'http://localhost:8000';
+        let TOKEN = '';
+        const ORG_ID = 'default';
+        let map = null;
+        let markersLayer = null;
+        let heatLayer = null;
+
+        // ============ IP → Coordonnées (simulé avec géolocalisation réaliste) ============
+        const IP_COORDS = {
+            // IPs malveillantes connues avec leurs pays
+            '45.33.32.156': { lat: 37.751, lng: -97.822, country: 'US', city: 'Dallas' },
+            '91.240.118.30': { lat: 20.5937, lng: 78.9629, country: 'IN', city: 'Mumbai' },
+            '185.220.101.34': { lat: 55.7558, lng: 37.6173, country: 'RU', city: 'Moscow' },
+            '5.188.62.10': { lat: 52.5200, lng: 13.4050, country: 'DE', city: 'Berlin' },
+            '103.235.46.40': { lat: 1.3521, lng: 103.8198, country: 'SG', city: 'Singapore' },
+            '194.26.29.100': { lat: 48.8566, lng: 2.3522, country: 'FR', city: 'Paris' },
+            '78.128.113.50': { lat: 50.4501, lng: 30.5234, country: 'UA', city: 'Kyiv' },
+            '23.129.64.200': { lat: 39.9042, lng: 116.4074, country: 'CN', city: 'Beijing' },
+            '197.210.84.10': { lat: -26.2041, lng: 28.0473, country: 'ZA', city: 'Johannesburg' },
+            '186.192.82.15': { lat: -23.5505, lng: -46.6333, country: 'BR', city: 'Sao Paulo' },
+            '31.13.24.50': { lat: 53.3498, lng: -6.2603, country: 'IE', city: 'Dublin' },
+            '84.17.45.100': { lat: 51.5074, lng: -0.1278, country: 'GB', city: 'London' },
+            '128.90.110.20': { lat: 59.3293, lng: 18.0686, country: 'SE', city: 'Stockholm' },
+            '212.47.229.50': { lat: 43.2965, lng: 5.3698, country: 'FR', city: 'Marseille' },
+            '45.155.205.30': { lat: 52.3676, lng: 4.9041, country: 'NL', city: 'Amsterdam' },
+        };
+
+        // Génère des coordonnées réalistes pour n'importe quelle IP
+        function getCoordsForIP(ip) {
+            if (IP_COORDS[ip]) return IP_COORDS[ip];
+            
+            // Génération pseudo-aléatoire basée sur l'IP
+            const hash = ip.split('.').reduce((acc, octet) => acc + parseInt(octet), 0);
+            const countries = [
+                { lat: 35.8617, lng: 104.1954, country: 'CN' },
+                { lat: 55.7558, lng: 37.6173, country: 'RU' },
+                { lat: 37.0902, lng: -95.7129, country: 'US' },
+                { lat: 51.1657, lng: 10.4515, country: 'DE' },
+                { lat: 46.2276, lng: 2.2137, country: 'FR' },
+                { lat: 35.9078, lng: 127.7669, country: 'KR' },
+                { lat: 23.6345, lng: -102.5528, country: 'MX' },
+                { lat: -14.2350, lng: -51.9253, country: 'BR' },
+                { lat: 20.5937, lng: 78.9629, country: 'IN' },
+                { lat: 1.3521, lng: 103.8198, country: 'SG' },
+            ];
+            const idx = hash % countries.length;
+            const base = countries[idx];
+            return {
+                lat: base.lat + (hash % 100) / 100,
+                lng: base.lng + (hash % 50) / 100,
+                country: base.country,
+                city: `City-${hash % 100}`,
+            };
+        }
+
+        // ============ API Client ============
+        async function api(path, method='GET', body=null) {
+            const opts = { method, headers: { 'Content-Type': 'application/json' } };
+            if (TOKEN) opts.headers['Authorization'] = `Bearer ${TOKEN}`;
+            if (body) opts.body = JSON.stringify(body);
+            try {
+                const resp = await fetch(`${API_BASE}${path}`, opts);
+                return await resp.json();
+            } catch(e) {
+                console.error('API Error:', e);
+                return null;
+            }
+        }
+
+        async function login() {
+            const form = new FormData();
+            form.append('username', 'admin');
+            form.append('password', 'cybershield2024');
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/auth/login`, { method: 'POST', body: form });
+                const data = await resp.json();
+                TOKEN = data.access_token;
+                return true;
+            } catch(e) {
+                return false;
+            }
+        }
+
+        // ============ Toast ============
+        function toast(msg) {
+            const c = document.getElementById('toast-container');
+            const el = document.createElement('div');
+            el.className = 'toast'; el.textContent = msg;
+            c.appendChild(el);
+            setTimeout(() => el.remove(), 3000);
+        }
+
+        // ============ Map Initialization ============
+        function initMap() {
+            map = L.map('map', {
+                center: [20, 0],
+                zoom: 2,
+                minZoom: 2,
+                maxZoom: 18,
+                zoomControl: true,
+                attributionControl: true,
+            });
+
+            // Dark tile layer
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 19,
+            }).addTo(map);
+
+            // Layer groups
+            markersLayer = L.layerGroup().addTo(map);
+            heatLayer = L.layerGroup().addTo(map);
+
+            // Legend
+            const legend = L.control({ position: 'bottomright' });
+            legend.onAdd = function() {
+                const div = L.DomUtil.create('div', 'legend');
+                div.innerHTML = `
+                    <div><i style="background:var(--critical)"></i> Critique</div>
+                    <div><i style="background:var(--high)"></i> Haute</div>
+                    <div><i style="background:var(--medium)"></i> Moyenne</div>
+                    <div><i style="background:var(--accent)"></i> Info</div>
+                    <div style="margin-top:6px;font-size:10px;color:var(--muted);">
+                        Taille = fréquence d'attaque
+                    </div>
+                `;
+                return div;
+            };
+            legend.addTo(map);
+
+            // Scale
+            L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
+        }
+
+        // ============ Map Data Rendering ============
+        function renderThreats(alerts) {
+            markersLayer.clearLayers();
+            heatLayer.clearLayers();
+
+            if (!alerts || alerts.length === 0) {
+                document.getElementById('attacks-table').innerHTML = 
+                    '<div class="empty-state" style="text-align:center;padding:30px;color:var(--muted);">✅ Aucune menace détectée</div>';
+                return;
+            }
+
+            // Group by IP for frequency
+            const ipGroups = {};
+            alerts.forEach(a => {
+                const ip = a.src_ip || 'unknown';
+                if (!ipGroups[ip]) ipGroups[ip] = [];
+                ipGroups[ip].push(a);
+            });
+
+            const heatPoints = [];
+            let criticalCount = 0;
+            const countries = new Set();
+            const types = new Set();
+
+            Object.entries(ipGroups).forEach(([ip, attacks]) => {
+                const coords = getCoordsForIP(ip);
+                if (coords) {
+                    countries.add(coords.country);
+                }
+                
+                const severity = attacks[0]?.severity || 'info';
+                if (severity === 'critical') criticalCount++;
+                attacks.forEach(a => { if (a.event_type) types.add(a.event_type); });
+
+                // Determine marker size based on frequency
+                const freq = attacks.length;
+                const radius = Math.min(10 + freq * 3, 40);
+                
+                // Color based on severity
+                const colors = { critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e', info: '#3b82f6' };
+                const color = colors[severity] || colors.info;
+
+                if (coords) {
+                    // Circle marker
+                    const marker = L.circleMarker([coords.lat, coords.lng], {
+                        radius: radius,
+                        fillColor: color,
+                        color: '#fff',
+                        weight: 1,
+                        opacity: 0.8,
+                        fillOpacity: 0.6,
+                    });
+
+                    // Popup with attack details
+                    const recentAttacks = attacks.slice(0, 5);
+                    let popupHtml = `
+                        <div style="min-width:200px;">
+                            <strong style="color:${color}">🛡️ ${ip}</strong>
+                            <div style="font-size:11px;color:var(--muted);margin:4px 0;">
+                                ${coords.city}, ${coords.country} — ${attacks.length} attaques
+                            </div>
+                            <table style="width:100%;font-size:11px;margin-top:6px;">
+                                <tr><th style="color:var(--muted);padding:2px;">Type</th>
+                                    <th style="color:var(--muted);padding:2px;">Sévérité</th>
+                                    <th style="color:var(--muted);padding:2px;">Heure</th></tr>
+                                ${recentAttacks.map(a => `
+                                    <tr>
+                                        <td>${a.event_type || '—'}</td>
+                                        <td><span class="badge ${(a.severity||'info').toLowerCase()}">${a.severity || 'info'}</span></td>
+                                        <td>${a.timestamp ? new Date(a.timestamp).toLocaleTimeString() : '—'}</td>
+                                    </tr>
+                                `).join('')}
+                            </table>
+                            ${attacks.length > 5 ? `<div style="font-size:10px;color:var(--muted);margin-top:4px;">+${attacks.length - 5} autres</div>` : ''}
+                            <button onclick="blockIP('${ip}')" style="
+                                margin-top:8px;padding:4px 12px;background:var(--critical);color:#fff;
+                                border:none;border-radius:4px;cursor:pointer;font-size:11px;
+                            ">🛡️ Bloquer cette IP</button>
+                        </div>
+                    `;
+                    marker.bindPopup(popupHtml, { maxWidth: 350, className: 'custom-popup' });
+
+                    markersLayer.addLayer(marker);
+
+                    // Add to heat points
+                    for (let i = 0; i < Math.min(freq, 10); i++) {
+                        heatPoints.push([coords.lat + (Math.random() - 0.5) * 2, coords.lng + (Math.random() - 0.5) * 2, freq]);
+                    }
+                }
+            });
+
+            // Update stats
+            document.getElementById('stat-total').textContent = Object.keys(ipGroups).length;
+            document.getElementById('stat-countries').textContent = countries.size;
+            document.getElementById('stat-critical').textContent = criticalCount;
+            document.getElementById('stat-types').textContent = types.size;
+            document.getElementById('attack-count').textContent = `${alerts.length} attaques`;
+
+            // Render table
+            let html = '<table><thead><tr><th>IP Source</th><th>Pays</th><th>Attaques</th><th>Sévérité</th><th>Dernière activité</th><th>Actions</th></tr></thead><tbody>';
+            Object.entries(ipGroups)
+                .sort((a, b) => b[1].length - a[1].length)
+                .slice(0, 20)
+                .forEach(([ip, attacks]) => {
+                    const coords = getCoordsForIP(ip);
+                    const sev = attacks[0]?.severity || 'info';
+                    const lastTime = attacks[0]?.timestamp ? new Date(attacks[0].timestamp).toLocaleTimeString() : '—';
+                    html += `<tr>
+                        <td style="font-family:monospace;">${ip}</td>
+                        <td>${coords?.country || '—'} ${coords?.city ? `(${coords.city})` : ''}</td>
+                        <td>${attacks.length}</td>
+                        <td><span class="badge ${sev.toLowerCase()}">${sev}</span></td>
+                        <td>${lastTime}</td>
+                        <td><button class="btn btn-outline" style="padding:4px 8px;font-size:10px;" onclick="blockIP('${ip}')">🛡️ Bloquer</button></td>
+                    </tr>`;
+                });
+            html += '</tbody></table>';
+            document.getElementById('attacks-table').innerHTML = html;
+
+            // Fit map to markers
+            if (Object.keys(ipGroups).length > 0) {
+                const group = L.featureGroup(Object.values(markersLayer._layers));
+                map.fitBounds(group.getBounds().pad(0.1));
+            }
+        }
+
+        // ============ Block IP ============
+        async function blockIP(ip) {
+            if (!ip) return;
+            const confirmed = confirm(`🛡️ Bloquer l'IP ${ip} sur le firewall ?`);
+            if (!confirmed) return;
+            const result = await api('/api/v1/soar/execute', 'POST', {
+                playbook_name: 'brute_force_response',
+                alert: { src_ip: ip, id: `map-block-${Date.now()}` },
+                iocs: { ips: [ip] },
+                dry_run: false,
+                human_approved: true,
+            });
+            toast(result?.status === 'completed' ? `✅ IP ${ip} bloquée` : `⚠️ Échec: ${result?.status || 'API indisponible'}`);
+        }
+
+        // ============ Refresh ============
+        async function refreshMap() {
+            const hours = parseInt(document.getElementById('time-filter').value);
+            const severity = document.getElementById('severity-filter').value;
+            document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+
+            // Try API first
+            const data = await api(`/api/v1/dashboard/alerts?org_id=${ORG_ID}&hours=${hours}&limit=100`);
+            
+            if (data?.alerts && data.alerts.length > 0) {
+                renderThreats(data.alerts);
+                document.getElementById('api-status').textContent = '✅ API connectée';
+            } else {
+                // Demo mode with realistic data
+                document.getElementById('api-status').textContent = '⚠️ Mode démo';
+                const demoAlerts = generateDemoAlerts(hours);
+                renderThreats(demoAlerts);
+            }
+        }
+
+        // ============ Demo Data Generator ============
+        function generateDemoAlerts(hours) {
+            const ips = Object.keys(IP_COORDS);
+            const types = ['scan', 'brute_force', 'c2_communication', 'data_exfiltration', 'lateral_movement', 'ransomware_activity'];
+            const severities = ['critical', 'high', 'medium', 'low'];
+            const alerts = [];
+            const now = Date.now();
+
+            // Add known malicious IPs with realistic attack patterns
+            const attackPatterns = [
+                { ip: '45.33.32.156', type: 'scan', sev: 'high', count: 15 },
+                { ip: '91.240.118.30', type: 'brute_force', sev: 'critical', count: 25 },
+                { ip: '185.220.101.34', type: 'c2_communication', sev: 'critical', count: 12 },
+                { ip: '5.188.62.10', type: 'scan', sev: 'medium', count: 8 },
+                { ip: '103.235.46.40', type: 'scan', sev: 'medium', count: 6 },
+                { ip: '194.26.29.100', type: 'brute_force', sev: 'high', count: 10 },
+                { ip: '78.128.113.50', type: 'data_exfiltration', sev: 'critical', count: 4 },
+                { ip: '23.129.64.200', type: 'scan', sev: 'low', count: 20 },
+                { ip: '197.210.84.10', type: 'brute_force', sev: 'high', count: 7 },
+                { ip: '186.192.82.15', type: 'lateral_movement', sev: 'high', count: 3 },
+                { ip: '31.13.24.50', type: 'scan', sev: 'low', count: 5 },
+                { ip: '84.17.45.100', type: 'c2_communication', sev: 'high', count: 6 },
+                { ip: '128.90.110.20', type: 'scan', sev: 'medium', count: 9 },
+                { ip: '212.47.229.50', type: 'brute_force', sev: 'high', count: 11 },
+                { ip: '45.155.205.30', type: 'data_exfiltration', sev: 'critical', count: 3 },
+            ];
+
+            attackPatterns.forEach(pattern => {
+                for (let i = 0; i < pattern.count; i++) {
+                    const offset = Math.random() * hours * 3600000;
+                    alerts.push({
+                        id: `demo-${i}-${Date.now()}`,
+                        src_ip: pattern.ip,
+                        event_type: pattern.type,
+                        severity: pattern.sev,
+                        timestamp: new Date(now - offset).toISOString(),
+                        dst_ip: `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+                        protocol: ['tcp', 'udp'][Math.floor(Math.random() * 2)],
+                        tags: ['demo', pattern.type],
+                    });
+                }
+            });
+
+            // Add some random IPs
+            for (let i = 0; i < 30; i++) {
+                const ip = `${Math.floor(Math.random() * 223) + 1}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
+                const type = types[Math.floor(Math.random() * types.length)];
+                const sev = severities[Math.floor(Math.random() * severities.length)];
+                const offset = Math.random() * hours * 3600000;
+                alerts.push({
+                    id: `demo-random-${i}`,
+                    src_ip: ip,
+                    event_type: type,
+                    severity: sev,
+                    timestamp: new Date(now - offset).toISOString(),
+                    dst_ip: `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+                    protocol: ['tcp', 'udp'][Math.floor(Math.random() * 2)],
+                    tags: ['demo', type],
+                });
+            }
+
+            // Filter by severity if selected
+            const sevFilter = document.getElementById('severity-filter').value;
+            if (sevFilter) {
+                return alerts.filter(a => a.severity === sevFilter);
+            }
+
+            return alerts;
+        }
+
+        // ============ Init ============
+        async function init() {
+            initMap();
+            const ok = await login();
+            await refreshMap();
+            setInterval(refreshMap, 30000); // Refresh every 30s
+        }
+
+        init();
+    </script>
+</body>
+</html>

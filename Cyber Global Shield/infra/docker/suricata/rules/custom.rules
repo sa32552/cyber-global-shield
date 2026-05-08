@@ -1,0 +1,187 @@
+# Cyber Global Shield - Custom Suricata Rules
+# MITRE ATT&CK mapped detection rules for advanced threat hunting
+
+# ============================================================
+# RECONNAISSANCE (MITRE TA0043)
+# ============================================================
+
+# Port Scan Detection
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"CGS - Port Scan Detected"; flow:stateless; threshold:type both, track by_src, count 25, seconds 10; classtype:attempted-recon; sid:1000001; rev:1;)
+
+# Service Discovery via SSH
+alert tcp $EXTERNAL_NET any -> $HOME_NET 22 (msg:"CGS - SSH Service Scan"; flow:to_server; flags:S; threshold:type both, track by_src, count 10, seconds 5; classtype:attempted-recon; sid:1000002; rev:1;)
+
+# DNS Reconnaissance
+alert udp $EXTERNAL_NET any -> $HOME_NET 53 (msg:"CGS - DNS Reconnaissance - High Query Rate"; flow:to_server; threshold:type both, track by_src, count 50, seconds 10; classtype:attempted-recon; sid:1000003; rev:1;)
+
+# ============================================================
+# INITIAL ACCESS (MITRE TA0001)
+# ============================================================
+
+# SQL Injection Attempt
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"CGS - SQL Injection Attempt"; flow:to_server,established; content:"' OR '1'='1"; nocase; http_uri; classtype:web-application-attack; sid:1000010; rev:1;)
+
+# XSS Attempt
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"CGS - Cross-Site Scripting Attempt"; flow:to_server,established; content:"<script>"; nocase; http_client_body; classtype:web-application-attack; sid:1000011; rev:1;)
+
+# Path Traversal
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"CGS - Path Traversal Attempt"; flow:to_server,established; content:"../"; http_uri; classtype:web-application-attack; sid:1000012; rev:1;)
+
+# Command Injection
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"CGS - Command Injection Attempt"; flow:to_server,established; content:";"; http_uri; content:"cmd"; http_uri; nocase; classtype:web-application-attack; sid:1000013; rev:1;)
+
+# ============================================================
+# EXECUTION (MITRE TA0002)
+# ============================================================
+
+# PowerShell Execution from Network
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"CGS - PowerShell Download Cradle"; flow:to_server,established; content:"powershell"; nocase; content:"-enc"; nocase; classtype:trojan-activity; sid:1000020; rev:1;)
+
+# WMI Execution
+alert tcp $HOME_NET any -> $HOME_NET 135 (msg:"CGS - WMI Lateral Movement"; flow:to_server,established; content:"|05|"; depth:1; classtype:lateral-movement; sid:1000021; rev:1;)
+
+# MSHTA Execution
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"CGS - MSHTA Execution Detected"; flow:to_server,established; content:"mshta"; nocase; http_uri; classtype:trojan-activity; sid:1000022; rev:1;)
+
+# ============================================================
+# PERSISTENCE (MITRE TA0003)
+# ============================================================
+
+# Registry Run Key Modification
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"CGS - Registry Run Key Modification via SMB"; flow:to_server,established; content:"|00|Software|00|Microsoft|00|Windows|00|CurrentVersion|00|Run"; classtype:bad-unknown; sid:1000030; rev:1;)
+
+# Scheduled Task Creation
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"CGS - Scheduled Task Creation via SMB"; flow:to_server,established; content:"schtasks"; nocase; classtype:bad-unknown; sid:1000031; rev:1;)
+
+# ============================================================
+# PRIVILEGE ESCALATION (MITRE TA0004)
+# ============================================================
+
+# Pass-the-Hash Detection
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"CGS - Potential Pass-the-Hash Attack"; flow:to_server,established; content:"|00|admin|00|"; content:"|00|$|00|"; classtype:attempted-admin; sid:1000040; rev:1;)
+
+# Token Manipulation
+alert tcp $HOME_NET any -> $HOME_NET 135 (msg:"CGS - Token Manipulation via RPC"; flow:to_server,established; content:"|05|00|0c|03|10|00|00|00|"; classtype:attempted-admin; sid:1000041; rev:1;)
+
+# ============================================================
+# DEFENSE EVASION (MITRE TA0005)
+# ============================================================
+
+# Process Injection
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"CGS - Process Injection via SMB"; flow:to_server,established; content:"CreateRemoteThread"; nocase; classtype:bad-unknown; sid:1000050; rev:1;)
+
+# Disabling Security Tools
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"CGS - Security Tool Disable Attempt"; flow:to_server,established; content:"net stop"; nocase; content:"defender"; nocase; classtype:bad-unknown; sid:1000051; rev:1;)
+
+# ============================================================
+# CREDENTIAL ACCESS (MITRE TA0006)
+# ============================================================
+
+# LSASS Access
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"CGS - LSASS Access via SMB"; flow:to_server,established; content:"lsass"; nocase; classtype:attempted-user; sid:1000060; rev:1;)
+
+# Keylogging
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"CGS - Potential Keylogger Data Exfiltration"; flow:to_server,established; content:"keystroke"; nocase; classtype:attempted-user; sid:1000061; rev:1;)
+
+# ============================================================
+# DISCOVERY (MITRE TA0007)
+# ============================================================
+
+# Network Share Discovery
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"CGS - Network Share Discovery"; flow:to_server,established; content:"net share"; nocase; classtype:attempted-recon; sid:1000070; rev:1;)
+
+# Domain Controller Discovery
+alert tcp $HOME_NET any -> $HOME_NET 389 (msg:"CGS - LDAP Domain Discovery"; flow:to_server,established; content:"objectClass=domain"; nocase; classtype:attempted-recon; sid:1000071; rev:1;)
+
+# ============================================================
+# LATERAL MOVEMENT (MITRE TA0008)
+# ============================================================
+
+# PsExec Execution
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"CGS - PsExec Lateral Movement"; flow:to_server,established; content:"PSEXESVC"; nocase; classtype:lateral-movement; sid:1000080; rev:1;)
+
+# RDP Lateral Movement
+alert tcp $HOME_NET any -> $HOME_NET 3389 (msg:"CGS - RDP Connection - Lateral Movement"; flow:to_server,established; threshold:type both, track by_src, count 5, seconds 60; classtype:lateral-movement; sid:1000081; rev:1;)
+
+# ============================================================
+# COLLECTION (MITRE TA0009)
+# ============================================================
+
+# Screen Capture
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"CGS - Screen Capture Data Exfiltration"; flow:to_server,established; content:"screenshot"; nocase; classtype:attempted-recon; sid:1000090; rev:1;)
+
+# Clipboard Data
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"CGS - Clipboard Data Theft"; flow:to_server,established; content:"clipboard"; nocase; classtype:attempted-user; sid:1000091; rev:1;)
+
+# ============================================================
+# COMMAND & CONTROL (MITRE TA0011)
+# ============================================================
+
+# C2 Beaconing - Regular Intervals
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"CGS - C2 Beaconing Detected"; flow:to_server,established; threshold:type both, track by_src, count 10, seconds 300; classtype:command-and-control; sid:1000100; rev:1;)
+
+# DNS Tunneling
+alert udp $HOME_NET any -> $EXTERNAL_NET 53 (msg:"CGS - DNS Tunneling - Long Query"; flow:to_server; content:"|01|"; dns_query; dns_query_len:>50; classtype:command-and-control; sid:1000101; rev:1;)
+
+# HTTP C2
+alert tcp $HOME_NET any -> $EXTERNAL_NET $HTTP_PORTS (msg:"CGS - HTTP C2 Communication"; flow:to_server,established; content:"POST"; http_method; content:"/api/"; http_uri; content:"Cookie"; http_header; classtype:command-and-control; sid:1000102; rev:1;)
+
+# ============================================================
+# EXFILTRATION (MITRE TA0010)
+# ============================================================
+
+# Large Data Upload
+alert tcp $HOME_NET any -> $EXTERNAL_NET $HTTP_PORTS (msg:"CGS - Large Data Exfiltration via HTTP"; flow:to_server,established; dsize:>500000; classtype:attempted-recon; sid:1000110; rev:1;)
+
+# FTP Exfiltration
+alert tcp $HOME_NET any -> $EXTERNAL_NET 21 (msg:"CGS - FTP Data Exfiltration"; flow:to_server,established; content:"STOR"; nocase; classtype:attempted-recon; sid:1000111; rev:1;)
+
+# ============================================================
+# IMPACT (MITRE TA0040)
+# ============================================================
+
+# Ransomware - File Encryption
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"CGS - Ransomware File Encryption"; flow:to_server,established; content:".encrypted"; nocase; classtype:ransomware; sid:1000120; rev:1;)
+
+# Ransomware - Extension Change
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"CGS - Ransomware Extension Change"; flow:to_server,established; content:".locked"; nocase; classtype:ransomware; sid:1000121; rev:1;)
+
+# Data Destruction
+alert tcp $HOME_NET any -> $HOME_NET 445 (msg:"CGS - Data Destruction Attempt"; flow:to_server,established; content:"vssadmin delete shadows"; nocase; classtype:bad-unknown; sid:1000122; rev:1;)
+
+# ============================================================
+# MALWARE SPECIFIC
+# ============================================================
+
+# Cobalt Strike Beacon
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"CGS - Cobalt Strike Beacon Detected"; flow:to_server,established; content:"Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko"; http_user_agent; classtype:command-and-control; sid:1000200; rev:1;)
+
+# Meterpreter
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"CGS - Meterpreter Payload Detected"; flow:to_server,established; content:"Meterpreter"; nocase; classtype:trojan-activity; sid:1000201; rev:1;)
+
+# Emotet
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"CGS - Emotet Malware Detected"; flow:to_server,established; content:"emotet"; nocase; http_uri; classtype:trojan-activity; sid:1000202; rev:1;)
+
+# TrickBot
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"CGS - TrickBot Malware Detected"; flow:to_server,established; content:"trickbot"; nocase; http_uri; classtype:trojan-activity; sid:1000203; rev:1;)
+
+# ============================================================
+# LOCAL RULES - Custom Environment
+# ============================================================
+
+# Internal Port Scanning
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"CGS - Internal Port Scan Detected"; flow:stateless; threshold:type both, track by_src, count 50, seconds 10; classtype:attempted-recon; sid:1000300; rev:1;)
+
+# Unusual Outbound Traffic
+alert tcp $HOME_NET any -> $EXTERNAL_NET !80,443 (msg:"CGS - Unusual Outbound Traffic"; flow:to_server,established; classtype:bad-unknown; sid:1000301; rev:1;)
+
+# ICMP Tunneling
+alert icmp $HOME_NET any -> $EXTERNAL_NET any (msg:"CGS - ICMP Tunneling - Large Packet"; dsize:>1000; classtype:command-and-control; sid:1000302; rev:1;)
+
+# ============================================================
+# SUPPRESSION RULES
+# ============================================================
+
+# Suppress noisy but benign traffic
+suppress gen_id 1, sig_id 1000001, track by_src, ip 10.0.0.0/8
+suppress gen_id 1, sig_id 1000300, track by_src, ip 10.0.0.0/8

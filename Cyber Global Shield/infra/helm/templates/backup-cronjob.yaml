@@ -1,0 +1,74 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "cgs.fullname" . }}-backup
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+spec:
+  schedule: "{{ .Values.backup.schedule }}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "cgs.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+              command:
+                - python
+                - -m
+                - infra.scripts.backup_clickhouse
+                - backup
+              env:
+                - name: CLICKHOUSE_HOST
+                  value: {{ include "cgs.fullname" . }}-clickhouse
+                - name: CLICKHOUSE_PORT
+                  value: "8123"
+                - name: CLICKHOUSE_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: cgs-secrets
+                      key: clickhouse-user
+                - name: CLICKHOUSE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: cgs-secrets
+                      key: clickhouse-password
+                - name: CLICKHOUSE_DATABASE
+                  value: cyber_shield
+                - name: CLICKHOUSE_BACKUP_DIR
+                  value: /backups
+                - name: CLICKHOUSE_BACKUP_RETENTION_DAYS
+                  value: "{{ .Values.backup.retentionDays }}"
+                {{- if .Values.backup.s3.bucket }}
+                - name: CLICKHOUSE_BACKUP_S3_BUCKET
+                  value: "{{ .Values.backup.s3.bucket }}"
+                - name: CLICKHOUSE_BACKUP_S3_ENDPOINT
+                  value: "{{ .Values.backup.s3.endpoint }}"
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: cgs-secrets
+                      key: aws-access-key-id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: cgs-secrets
+                      key: aws-secret-access-key
+                {{- end }}
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: cgs-backups
+{{- end }}

@@ -1,0 +1,396 @@
+{
+    "dashboard": {
+        "title": "Cyber Global Shield - Security Overview",
+        "description": "Real-time security monitoring dashboard with MITRE ATT&CK mapping",
+        "tags": [
+            "security",
+            "cyber",
+            "mitre"
+        ],
+        "timezone": "utc",
+        "panels": [
+            {
+                "title": "Active Threats",
+                "type": "stat",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "sum(cyber_shield_alerts_total{severity=\"critical\"})",
+                        "legendFormat": "Critical"
+                    }
+                ],
+                "options": {
+                    "colorMode": "background",
+                    "graphMode": "area",
+                    "justifyMode": "center",
+                    "orientation": "auto",
+                    "reduceOptions": {
+                        "calcs": [
+                            "lastNotNull"
+                        ],
+                        "fields": "",
+                        "values": false
+                    },
+                    "textMode": "auto"
+                },
+                "fieldConfig": {
+                    "defaults": {
+                        "color": {
+                            "mode": "thresholds"
+                        },
+                        "thresholds": {
+                            "steps": [
+                                {
+                                    "color": "green",
+                                    "value": null
+                                },
+                                {
+                                    "color": "orange",
+                                    "value": 1
+                                },
+                                {
+                                    "color": "red",
+                                    "value": 5
+                                }
+                            ]
+                        }
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 4,
+                    "x": 0,
+                    "y": 0
+                }
+            },
+            {
+                "title": "Anomaly Score (ML)",
+                "type": "gauge",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "avg(cyber_shield_anomaly_score)",
+                        "legendFormat": "Avg Anomaly Score"
+                    }
+                ],
+                "options": {
+                    "reduceOptions": {
+                        "calcs": [
+                            "lastNotNull"
+                        ]
+                    },
+                    "showThresholdLabels": false,
+                    "showThresholdMarkers": true
+                },
+                "fieldConfig": {
+                    "defaults": {
+                        "min": 0,
+                        "max": 1,
+                        "color": {
+                            "mode": "thresholds"
+                        },
+                        "thresholds": {
+                            "steps": [
+                                {
+                                    "color": "green",
+                                    "value": null
+                                },
+                                {
+                                    "color": "yellow",
+                                    "value": 0.5
+                                },
+                                {
+                                    "color": "red",
+                                    "value": 0.8
+                                }
+                            ]
+                        }
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 4,
+                    "x": 4,
+                    "y": 0
+                }
+            },
+            {
+                "title": "Events per Second",
+                "type": "graph",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "rate(cyber_shield_logs_total[1m])",
+                        "legendFormat": "EPS"
+                    }
+                ],
+                "options": {
+                    "legend": {
+                        "show": true
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 8,
+                    "x": 8,
+                    "y": 0
+                }
+            },
+            {
+                "title": "Attack Types (MITRE ATT&CK)",
+                "type": "piechart",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "sum by(attack_type) (cyber_shield_attacks_total)",
+                        "legendFormat": "{{attack_type}}"
+                    }
+                ],
+                "options": {
+                    "pieType": "pie",
+                    "legend": {
+                        "displayMode": "table",
+                        "placement": "right"
+                    },
+                    "reduceOptions": {
+                        "calcs": [
+                            "sum"
+                        ],
+                        "fields": "",
+                        "values": false
+                    },
+                    "tooltip": {
+                        "mode": "single"
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 8,
+                    "x": 0,
+                    "y": 8
+                }
+            },
+            {
+                "title": "Detection Latency (ms)",
+                "type": "graph",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "cyber_shield_detection_latency_ms",
+                        "legendFormat": "Latency"
+                    }
+                ],
+                "options": {
+                    "legend": {
+                        "show": true
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 8,
+                    "x": 8,
+                    "y": 8
+                }
+            },
+            {
+                "title": "Top Source IPs",
+                "type": "table",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "topk(10, sum by(src_ip) (rate(cyber_shield_logs_total[5m])))",
+                        "legendFormat": "{{src_ip}}"
+                    }
+                ],
+                "options": {
+                    "showHeader": true
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 8,
+                    "x": 0,
+                    "y": 16
+                }
+            },
+            {
+                "title": "System Health",
+                "type": "stat",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "cyber_shield_system_health",
+                        "legendFormat": "Health"
+                    }
+                ],
+                "options": {
+                    "colorMode": "background",
+                    "graphMode": "none",
+                    "reduceOptions": {
+                        "calcs": [
+                            "lastNotNull"
+                        ]
+                    }
+                },
+                "fieldConfig": {
+                    "defaults": {
+                        "color": {
+                            "mode": "thresholds"
+                        },
+                        "thresholds": {
+                            "steps": [
+                                {
+                                    "color": "red",
+                                    "value": null
+                                },
+                                {
+                                    "color": "yellow",
+                                    "value": 0.5
+                                },
+                                {
+                                    "color": "green",
+                                    "value": 0.8
+                                }
+                            ]
+                        }
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 4,
+                    "x": 16,
+                    "y": 0
+                }
+            },
+            {
+                "title": "ML Model Performance",
+                "type": "graph",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "cyber_shield_ml_precision",
+                        "legendFormat": "Precision"
+                    },
+                    {
+                        "expr": "cyber_shield_ml_recall",
+                        "legendFormat": "Recall"
+                    },
+                    {
+                        "expr": "cyber_shield_ml_f1_score",
+                        "legendFormat": "F1 Score"
+                    }
+                ],
+                "options": {
+                    "legend": {
+                        "show": true
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 8,
+                    "x": 0,
+                    "y": 24
+                }
+            },
+            {
+                "title": "SOAR Playbook Executions",
+                "type": "graph",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "rate(cyber_shield_soar_executions_total[5m])",
+                        "legendFormat": "Executions"
+                    }
+                ],
+                "options": {
+                    "legend": {
+                        "show": true
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 8,
+                    "x": 8,
+                    "y": 24
+                }
+            },
+            {
+                "title": "Threat Intelligence Feeds",
+                "type": "stat",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "cyber_shield_threat_intel_iocs_total",
+                        "legendFormat": "IOCs"
+                    }
+                ],
+                "options": {
+                    "colorMode": "background",
+                    "graphMode": "area",
+                    "reduceOptions": {
+                        "calcs": [
+                            "lastNotNull"
+                        ]
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 4,
+                    "x": 16,
+                    "y": 8
+                }
+            },
+            {
+                "title": "Self-Healing Events",
+                "type": "graph",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "rate(cyber_shield_healing_events_total[5m])",
+                        "legendFormat": "Healing Events"
+                    }
+                ],
+                "options": {
+                    "legend": {
+                        "show": true
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 8,
+                    "x": 0,
+                    "y": 32
+                }
+            },
+            {
+                "title": "Federated Learning Status",
+                "type": "stat",
+                "datasource": "Prometheus",
+                "targets": [
+                    {
+                        "expr": "cyber_shield_fl_clients_online",
+                        "legendFormat": "FL Clients"
+                    }
+                ],
+                "options": {
+                    "colorMode": "background",
+                    "graphMode": "none",
+                    "reduceOptions": {
+                        "calcs": [
+                            "lastNotNull"
+                        ]
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 4,
+                    "x": 16,
+                    "y": 16
+                }
+            }
+        ],
+        "refresh": "10s",
+        "schemaVersion": 27,
+        "version": 1
+    },
+    "overwrite": true
+}

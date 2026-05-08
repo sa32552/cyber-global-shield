@@ -1,0 +1,26 @@
+FROM python:3.11-slim
+
+LABEL maintainer="Cyber Global Shield Team"
+LABEL description="Cyber Global Shield - Federated Learning Server"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install only FL dependencies
+RUN pip install --no-cache-dir flwr torch numpy structlog
+
+COPY app/fl/ /app/app/fl/
+COPY app/ml/anomaly_detector.py /app/app/ml/anomaly_detector.py
+COPY app/core/config.py /app/app/core/config.py
+
+RUN mkdir -p /app/app/core && touch /app/app/__init__.py /app/app/core/__init__.py /app/app/ml/__init__.py
+
+RUN useradd -m -u 1000 -s /bin/bash fluser && chown -R fluser:fluser /app
+USER fluser
+
+EXPOSE 8080
+
+CMD ["python", "-m", "app.fl.federated_server"]

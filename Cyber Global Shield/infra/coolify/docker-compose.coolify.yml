@@ -1,0 +1,300 @@
+# =============================================================================
+# Cyber Global Shield — Coolify Deployment Configuration
+# =============================================================================
+# Ce fichier est utilisé par Coolify pour déployer Cyber Global Shield
+# Coolify est une alternative self-hosted à Vercel/Heroku
+# =============================================================================
+
+version: '3.9'
+
+services:
+  # ===========================================================================
+  # API Gateway (FastAPI + Uvicorn)
+  # ===========================================================================
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.prod
+      args:
+        - SERVICE=api
+    image: ghcr.io/cyber-global-shield/api:${TAG:-latest}
+    container_name: cgs-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - CLICKHOUSE_HOST=${CLICKHOUSE_HOST:-clickhouse}
+      - CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-8123}
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://*.cyberglobalshield.io}
+      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-true}
+      - RATE_LIMIT_REQUESTS_PER_MINUTE=${RATE_LIMIT_REQUESTS_PER_MINUTE:-60}
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      - ENABLE_HTTPS_REDIRECT=${ENABLE_HTTPS_REDIRECT:-true}
+    volumes:
+      - api_data:/app/data
+      - api_models:/app/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    labels:
+      - "coolify.service=api"
+      - "coolify.healthcheck.path=/health"
+      - "coolify.healthcheck.port=8000"
+
+  # ===========================================================================
+  # ML Service (Anomaly Detection + Federated Learning)
+  # ===========================================================================
+  ml:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.prod
+      args:
+        - SERVICE=ml
+    image: ghcr.io/cyber-global-shield/ml:${TAG:-latest}
+    container_name: cgs-ml
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      - MODEL_PATH=/app/models/anomaly_detector.pt
+      - BATCH_SIZE=${BATCH_SIZE:-64}
+      - LEARNING_RATE=${LEARNING_RATE:-0.001}
+      - REDIS_URL=${REDIS_URL}
+    volumes:
+      - ml_models:/app/models
+      - ml_data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    labels:
+      - "coolify.service=ml"
+      - "coolify.healthcheck.path=/health"
+      - "coolify.healthcheck.port=8001"
+
+  # ===========================================================================
+  # SOAR Engine (Security Orchestration, Automation & Response)
+  # ===========================================================================
+  soar:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.prod
+      args:
+        - SERVICE=soar
+    image: ghcr.io/cyber-global-shield/soar:${TAG:-latest}
+    container_name: cgs-soar
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - REDIS_URL=${REDIS_URL}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    labels:
+      - "coolify.service=soar"
+      - "coolify.healthcheck.path=/health"
+      - "coolify.healthcheck.port=8002"
+
+  # ===========================================================================
+  # Web Frontend
+  # ===========================================================================
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.prod
+      args:
+        - SERVICE=web
+    image: ghcr.io/cyber-global-shield/web:${TAG:-latest}
+    container_name: cgs-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - API_URL=${API_URL:-https://api.cyberglobalshield.io}
+      - WS_URL=${WS_URL:-wss://api.cyberglobalshield.io/ws}
+    volumes:
+      - web_static:/usr/share/nginx/html
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    labels:
+      - "coolify.service=web"
+      - "coolify.healthcheck.path=/"
+      - "coolify.healthcheck.port=80"
+
+  # ===========================================================================
+  # ClickHouse (Analytics Database)
+  # ===========================================================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: cgs-clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-cgs_user}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB:-cyber_shield}
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 16G
+        reservations:
+          cpus: '1'
+          memory: 4G
+
+  # ===========================================================================
+  # Redis (Cache + Message Broker)
+  # ===========================================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: cgs-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.2'
+          memory: 256M
+
+  # ===========================================================================
+  # MLflow (Model Registry)
+  # ===========================================================================
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.14.1
+    container_name: cgs-mlflow
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://${MLFLOW_DB_USER}:${MLFLOW_DB_PASSWORD}@${MLFLOW_DB_HOST}:5432/mlflow
+      --default-artifact-root s3://${S3_MODELS_BUCKET}/mlflow
+    environment:
+      - MLFLOW_S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ===========================================================================
+  # Vector (Log Aggregator)
+  # ===========================================================================
+  vector:
+    image: timberio/vector:0.38-alpine
+    container_name: cgs-vector
+    restart: unless-stopped
+    volumes:
+      - ./vector.yaml:/etc/vector/vector.yaml:ro
+      - /var/log:/var/log:ro
+      - vector_data:/var/lib/vector
+    depends_on:

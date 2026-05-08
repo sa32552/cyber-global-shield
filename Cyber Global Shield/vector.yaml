@@ -1,0 +1,375 @@
+# =============================================================================
+# Cyber Global Shield - Vector Configuration
+# High-performance log collection pipeline:
+# Zeek/Suricata → Vector → Kafka → ClickHouse
+# =============================================================================
+
+# Global settings
+data_dir: /var/lib/vector
+
+# ---- Sources ----
+
+sources:
+  # Zeek connection logs (conn.log)
+  zeek_conn:
+    type: file
+    include:
+      - /var/log/zeek/current/conn.log
+      - /usr/local/zeek/logs/current/conn.log
+    read_from: end
+    multiline:
+      mode: halt_before
+      condition_pattern: "^#"
+
+  # Zeek DNS logs
+  zeek_dns:
+    type: file
+    include:
+      - /var/log/zeek/current/dns.log
+      - /usr/local/zeek/logs/current/dns.log
+    read_from: end
+    multiline:
+      mode: halt_before
+      condition_pattern: "^#"
+
+  # Zeek HTTP logs
+  zeek_http:
+    type: file
+    include:
+      - /var/log/zeek/current/http.log
+      - /usr/local/zeek/logs/current/http.log
+    read_from: end
+    multiline:
+      mode: halt_before
+      condition_pattern: "^#"
+
+  # Zeek notice/alert logs
+  zeek_notice:
+    type: file
+    include:
+      - /var/log/zeek/current/notice.log
+      - /usr/local/zeek/logs/current/notice.log
+    read_from: end
+    multiline:
+      mode: halt_before
+      condition_pattern: "^#"
+
+  # Zeek SSH logs
+  zeek_ssh:
+    type: file
+    include:
+      - /var/log/zeek/current/ssh.log
+      - /usr/local/zeek/logs/current/ssh.log
+    read_from: end
+    multiline:
+      mode: halt_before
+      condition_pattern: "^#"
+
+  # Zeek SMB logs (lateral movement detection)
+  zeek_smb:
+    type: file
+    include:
+      - /var/log/zeek/current/smb_files.log
+      - /var/log/zeek/current/smb_mapping.log
+      - /usr/local/zeek/logs/current/smb_files.log
+      - /usr/local/zeek/logs/current/smb_mapping.log
+    read_from: end
+    multiline:
+      mode: halt_before
+      condition_pattern: "^#"
+
+  # Zeek files logs (malware detection)
+  zeek_files:
+    type: file
+    include:
+      - /var/log/zeek/current/files.log
+      - /usr/local/zeek/logs/current/files.log
+    read_from: end
+    multiline:
+      mode: halt_before
+      condition_pattern: "^#"
+
+  # Suricata EVE JSON output
+  suricata_eve:
+    type: file
+    include:
+      - /var/log/suricata/eve.json
+    read_from: end
+
+  # Vector internal metrics
+  vector_metrics:
+    type: internal_metrics
+
+# ---- Transforms ----
+
+transforms:
+  # Parse Zeek TSV format → structured JSON
+  parse_zeek_conn:
+    type: remap
+    inputs:
+      - zeek_conn
+    source: |
+      . = parse_tsv!(.message, names: [
+        "ts", "uid", "id_orig_h", "id_orig_p", "id_resp_h", "id_resp_p",
+        "proto", "service", "duration", "orig_bytes", "resp_bytes",
+        "conn_state", "local_orig", "local_resp", "missed_bytes",
+        "history", "orig_pkts", "orig_ip_bytes", "resp_pkts", "resp_ip_bytes",
+        "tunnel_parents"
+      ])
+      .source = "zeek"
+      .event_type = "connection"
+      .severity = "info"
+      .tags = ["network", "connection"]
+
+  parse_zeek_dns:
+    type: remap
+    inputs:
+      - zeek_dns
+    source: |
+      . = parse_tsv!(.message, names: [
+        "ts", "uid", "id_orig_h", "id_orig_p", "id_resp_h", "id_resp_p",
+        "proto", "trans_id", "rtt", "query", "qclass", "qclass_name",
+        "qtype", "qtype_name", "rcode", "rcode_name", "AA", "TC", "RD",
+        "RA", "Z", "answers", "TTLs", "rejected"
+      ])
+      .source = "zeek"
+      .event_type = "dns_query"
+      .severity = "info"
+      .tags = ["network", "dns"]
+
+  parse_zeek_http:
+    type: remap
+    inputs:
+      - zeek_http
+    source: |
+      . = parse_tsv!(.message, names: [
+        "ts", "uid", "id_orig_h", "id_orig_p", "id_resp_h", "id_resp_p",
+        "trans_depth", "method", "host", "uri", "referrer", "version",
+        "user_agent", "origin", "request_body_len", "response_body_len",
+        "status_code", "status_msg", "info_code", "info_msg", "tags_country",
+        "resp_fuids", "resp_mime_types", "resp_filenames"
+      ])
+      .source = "zeek"
+      .event_type = "http_request"
+      .severity = "info"
+      .tags = ["network", "http"]
+
+  parse_zeek_notice:
+    type: remap
+    inputs:
+      - zeek_notice
+    source: |
+      . = parse_tsv!(.message, names: [
+        "ts", "uid", "id_orig_h", "id_orig_p", "id_resp_h", "id_resp_p",
+        "fuid", "file_mime_type", "file_desc", "proto", "note", "msg",
+        "sub", "src", "dst", "p", "n", "peer_descr", "actions",
+        "email_dest", "suppress_for", "remote_location_country_code",
+        "remote_location_region", "remote_location_city",
+        "remote_location_latitude", "remote_location_longitude"
+      ])
+      .source = "zeek"
+      .event_type = "alert"
+      .tags = ["alert", "zeek_notice"]
+
+  parse_zeek_ssh:
+    type: remap
+    inputs:
+      - zeek_ssh
+    source: |
+      . = parse_tsv!(.message, names: [
+        "ts", "uid", "id_orig_h", "id_orig_p", "id_resp_h", "id_resp_p",
+        "version", "auth_success", "auth_attempts", "direction",
+        "client", "server", "cipher_alg", "mac_alg", "compression_alg",
+        "kex_alg", "host_key_alg", "host_key"
+      ])
+      .source = "zeek"
+      .event_type = if .auth_success == "F" { "brute_force" } else { "ssh_session" }
+      .tags = ["network", "ssh"]
+
+  parse_zeek_smb:
+    type: remap
+    inputs:
+      - zeek_smb
+    source: |
+      . = parse_tsv!(.message, names: [
+        "ts", "uid", "id_orig_h", "id_orig_p", "id_resp_h", "id_resp_p",
+        "action", "path", "name", "size", "prev_name", "times_modified",
+        "times_accessed", "times_created", "times_changed"
+      ])
+      .source = "zeek"
+      .event_type = "smb_activity"
+      .tags = ["network", "smb", "lateral_movement"]
+
+  parse_zeek_files:
+    type: remap
+    inputs:
+      - zeek_files
+    source: |
+      . = parse_tsv!(.message, names: [
+        "ts", "fuid", "tx_hosts", "rx_hosts", "conn_uids", "source",
+        "depth", "analyzers", "mime_type", "filename", "duration",
+        "local_orig", "is_orig", "seen_bytes", "total_bytes",
+        "missing_bytes", "overflow_bytes", "timedout", "parent_fuid",
+        "md5", "sha1", "sha256", "extracted", "extracted_cutoff", "extracted_size"
+      ])
+      .source = "zeek"
+      .event_type = "file_activity"
+      .tags = ["network", "files"]
+
+  # Parse Suricata EVE JSON → normalized format
+  parse_suricata:
+    type: remap
+    inputs:
+      - suricata_eve
+    source: |
+      parsed = parse_json!(.message) ?? {}
+      if exists(parsed.event_type) {
+        . = parsed
+        .source = "suricata"
+        .event_type = parsed.event_type ?? "unknown"
+        .severity = "info"
+        .tags = ["network", "suricata"]
+
+        if exists(parsed.alert) {
+          .event_type = "alert"
+          .severity = to_string(parsed.alert.severity) ?? "medium"
+          .alert_signature = parsed.alert.signature ?? ""
+          .alert_category = parsed.alert.category ?? ""
+          .tags = ["alert", "suricata", parsed.alert.signature ?? ""]
+        }
+        if exists(parsed.flow) {
+          .event_type = "flow"
+        }
+        if exists(parsed.dns) {
+          .event_type = "dns_query"
+        }
+        if exists(parsed.http) {
+          .event_type = "http_request"
+        }
+        if exists(parsed.tls) {
+          .event_type = "tls_handshake"
+        }
+        if exists(parsed.ssh) {
+          .event_type = "ssh_session"
+        }
+        if exists(parsed.smb) {
+          .event_type = "smb_activity"
+          .tags = ["network", "smb", "lateral_movement"]
+        }
+      }
+
+  # Normalize all sources to common format for Kafka
+  normalize_for_kafka:
+    type: remap
+    inputs:
+      - parse_zeek_conn
+      - parse_zeek_dns
+      - parse_zeek_http
+      - parse_zeek_notice
+      - parse_zeek_ssh
+      - parse_zeek_smb
+      - parse_zeek_files
+      - parse_suricata
+    source: |
+      . = {
+        "org_id": "default",
+        "source": .source ?? "unknown",
+        "event_type": .event_type ?? "unknown",
+        "severity": .severity ?? "info",
+        "src_ip": .id_orig_h ?? .src_ip ?? .src ?? "",
+        "dst_ip": .id_resp_h ?? .dest_ip ?? .dst ?? "",
+        "src_port": to_int(.id_orig_p) ?? to_int(.src_port) ?? 0,
+        "dst_port": to_int(.id_resp_p) ?? to_int(.dest_port) ?? 0,
+        "protocol": .proto ?? .protocol ?? .app_proto ?? "unknown",
+        "hostname": .host ?? .server_name ?? "",
+        "user": .user ?? .username ?? "",
+        "process_name": "",
+        "tags": .tags ?? [],
+        "bytes_sent": to_int(.orig_bytes) ?? to_int(.bytes_toserver) ?? 0,
+        "bytes_received": to_int(.resp_bytes) ?? to_int(.bytes_toclient) ?? 0,
+        "packets_sent": to_int(.orig_pkts) ?? 0,
+        "packets_received": to_int(.resp_pkts) ?? 0,
+        "timestamp": .ts ?? .timestamp ?? now(),
+        "raw_payload": encode_json(.)
+      }
+
+      # Map severity for known attack patterns
+      if .event_type == "alert" {
+        .severity = "high"
+      }
+      if .event_type == "brute_force" {
+        .severity = "high"
+      }
+      if exists(.alert_signature) {
+        if contains(string!(.alert_signature), "ransomware") ?? false {
+          .severity = "critical"
+          .event_type = "ransomware_activity"
+        }
+        if contains(string!(.alert_signature), "C2") ?? false {
+          .severity = "critical"
+          .event_type = "c2_communication"
+        }
+        if contains(string!(.alert_signature), "scan") ?? false {
+          .severity = "low"
+          .event_type = "scan"
+        }
+      }
+
+  # Route by severity
+  route_logs:
+    type: route
+    inputs:
+      - normalize_for_kafka
+    route:
+      high_severity: '.severity == "high" || .severity == "critical"'
+      normal: '.severity != "high" && .severity != "critical"'
+
+# ---- Sinks ----
+
+sinks:
+  # Send all logs to Kafka raw_logs topic
+  kafka_raw_logs:
+    type: kafka
+    inputs:
+      - normalize_for_kafka
+    bootstrap_servers: "kafka:9092"
+    topic: "raw_logs"
+    key_field: org_id
+    encoding:
+      codec: json
+    compression: lz4
+    batch:
+      max_bytes: 1048576    # 1MB
+      timeout_secs: 1
+
+  # Send high-severity alerts to dedicated topic
+  kafka_alerts:
+    type: kafka
+    inputs:
+      - route_logs.high_severity
+    bootstrap_servers: "kafka:9092"
+    topic: "alerts"
+    key_field: org_id
+    encoding:
+      codec: json
+    compression: lz4
+    batch:
+      max_bytes: 262144     # 256KB
+      timeout_secs: 0.5     # Faster for alerts
+
+  # Console output for debugging
+  console_debug:
+    type: console
+    inputs:
+      - route_logs.high_severity
+    encoding:
+      codec: json
+    # Only in debug mode
+    # enabled: false
+
+  # Vector internal metrics
+  prometheus_metrics:
+    type: prometheus_exporter
+    inputs:
+      - vector_metrics
+    address: 0.0.0.0:9000

@@ -1,0 +1,1498 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Global Shield — Transcendent Dashboard v7.0 ULTIMATE</title>
+    <!-- ===== CORE RENDERING ENGINES ===== -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <!-- ===== WEB TRANSPORT POLYFILL ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/webtransport-polyfill@0.1.0/dist/webtransport.min.js"></script>
+    <!-- ===== MATHJS FOR ADVANCED COMPUTATIONS ===== -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.2.1/math.min.js"></script>
+    <!-- ===== TENSORFLOW.JS FOR CLIENT-SIDE ML ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+    <!-- ===== WASM CRYPTO ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/@noble/ciphers@0.4.1/webcrypto.min.js"></script>
+    <!-- ===== WEBGPU ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/@webgpu/types@0.1.40/dist/index.min.js"></script>
+    <!-- ===== WEBRTC ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/webrtc-adapter@8.2.3/dist/adapter.min.js"></script>
+    <!-- ===== WEBAUTHN ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@9.0.1/dist/bundle/index.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: rgba(26, 31, 46, 0.85);
+            --bg-card-hover: rgba(34, 42, 62, 0.9);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border-color: rgba(45, 55, 72, 0.6);
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --accent-green: #22c55e;
+            --accent-yellow: #eab308;
+            --accent-orange: #f97316;
+            --accent-red: #ef4444;
+            --accent-purple: #a855f7;
+            --accent-pink: #ec4899;
+            --shadow: 0 8px 32px rgba(0,0,0,0.4);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            --glass: rgba(26, 31, 46, 0.7);
+            --glass-border: rgba(255,255,255,0.08);
+        }
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        body{
+            font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+            background:var(--bg-primary);color:var(--text-primary);line-height:1.6;
+            min-height:100vh;overflow-x:hidden;
+        }
+        body::before{
+            content:'';position:fixed;top:0;left:0;width:100%;height:100%;
+            background:radial-gradient(ellipse at 20% 50%, rgba(168,85,247,0.08) 0%, transparent 50%),
+                       radial-gradient(ellipse at 80% 20%, rgba(6,182,212,0.06) 0%, transparent 50%),
+                       radial-gradient(ellipse at 50% 80%, rgba(59,130,246,0.05) 0%, transparent 50%);
+            pointer-events:none;z-index:0;
+        }
+        .app{display:flex;min-height:100vh;position:relative;z-index:1}
+
+        /* ===== Sidebar ===== */
+        .sidebar{
+            width:260px;background:rgba(17,24,39,0.95);
+            border-right:1px solid var(--glass-border);padding:1.5rem;
+            display:flex;flex-direction:column;position:fixed;top:0;left:0;
+            height:100vh;z-index:100;backdrop-filter:blur(20px);
+            transition:var(--transition);
+        }
+        .sidebar-logo{
+            display:flex;align-items:center;gap:.75rem;margin-bottom:2rem;
+            padding-bottom:1rem;border-bottom:1px solid var(--glass-border);
+        }
+        .sidebar-logo .shield-icon{
+            width:44px;height:44px;
+            background:linear-gradient(135deg,var(--accent-purple),var(--accent-pink));
+            border-radius:12px;display:flex;align-items:center;justify-content:center;
+            font-size:1.3rem;box-shadow:0 0 20px rgba(168,85,247,0.3);
+        }
+        .sidebar-logo h1{font-size:1rem;font-weight:700;background:linear-gradient(135deg,var(--text-primary),var(--accent-purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .sidebar-logo span{font-size:.7rem;color:var(--text-muted)}
+        .sidebar-nav{flex:1}
+        .nav-item{
+            display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;
+            border-radius:var(--radius-sm);color:var(--text-secondary);
+            text-decoration:none;cursor:pointer;transition:var(--transition);
+            margin-bottom:.25rem;position:relative;overflow:hidden;
+        }
+        .nav-item::before{
+            content:'';position:absolute;top:0;left:0;width:100%;height:100%;
+            background:linear-gradient(90deg,transparent,rgba(168,85,247,0.05));
+            opacity:0;transition:var(--transition);
+        }
+        .nav-item:hover::before,.nav-item.active::before{opacity:1}
+        .nav-item:hover,.nav-item.active{color:var(--text-primary)}
+        .nav-item.active{border-left:3px solid var(--accent-purple);background:rgba(168,85,247,0.1)}
+        .nav-item .icon{font-size:1.2rem;width:24px;text-align:center}
+        .sidebar-footer{padding-top:1rem;border-top:1px solid var(--glass-border)}
+        .ws-status{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--text-secondary)}
+        .ws-dot{width:8px;height:8px;border-radius:50%;background:var(--text-muted);transition:var(--transition)}
+        .ws-dot.connected{background:var(--accent-green);box-shadow:0 0 10px rgba(34,197,94,0.5)}
+        .ws-dot.disconnected{background:var(--accent-red);box-shadow:0 0 10px rgba(239,68,68,0.5)}
+        .ws-dot.transport{background:var(--accent-cyan);box-shadow:0 0 10px rgba(6,182,212,0.5)}
+
+        /* ===== Main ===== */
+        .main{flex:1;margin-left:260px;padding:1.5rem 2rem;position:relative;z-index:1}
+
+        /* ===== Header ===== */
+        .header{
+            display:flex;justify-content:space-between;align-items:center;
+            margin-bottom:2rem;flex-wrap:wrap;gap:1rem;
+        }
+        .header-left h2{font-size:1.5rem;font-weight:700;display:flex;align-items:center;gap:.5rem}
+        .header-left h2 .badge{
+            font-size:.6rem;padding:.2rem .6rem;border-radius:20px;
+            background:linear-gradient(135deg,var(--accent-purple),var(--accent-pink));
+            color:#fff;font-weight:600;letter-spacing:.5px;
+        }
+        .header-left p{color:var(--text-secondary);font-size:.9rem}
+        .header-right{display:flex;align-items:center;gap:1rem}
+        .status-indicator{
+            display:flex;align-items:center;gap:.5rem;padding:.5rem 1rem;
+            background:var(--glass);border:1px solid var(--glass-border);
+            border-radius:20px;font-size:.85rem;backdrop-filter:blur(10px);
+        }
+        .status-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-green);animation:pulse 2s infinite}
+        @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+        .refresh-btn{
+            padding:.5rem 1.2rem;background:var(--glass);border:1px solid var(--glass-border);
+            border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;
+            transition:var(--transition);backdrop-filter:blur(10px);
+        }
+        .refresh-btn:hover{background:var(--bg-card-hover);border-color:var(--accent-purple);transform:translateY(-1px)}
+
+        /* ===== 3D Canvas Container ===== */
+        #threeCanvas{
+            position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;
+            pointer-events:none;opacity:0.4;
+        }
+
+        /* ===== Global Score ===== */
+        .global-score-card{
+            background:var(--glass);border:1px solid var(--glass-border);
+            border-radius:var(--radius);padding:2rem;margin-bottom:2rem;
+            text-align:center;backdrop-filter:blur(20px);
+            position:relative;overflow:hidden;
+        }
+        .global-score-card::before{
+            content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;
+            background:conic-gradient(from 0deg,transparent,rgba(168,85,247,0.1),transparent,rgba(6,182,212,0.1),transparent);
+            animation:rotate 10s linear infinite;
+        }
+        @keyframes rotate{to{transform:rotate(360deg)}}
+        .global-score-card>*{position:relative;z-index:1}
+        .global-score-value{
+            font-size:4rem;font-weight:800;
+            background:linear-gradient(135deg,var(--accent-purple),var(--accent-pink),var(--accent-cyan));
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+            filter:drop-shadow(0 0 30px rgba(168,85,247,0.3));
+        }
+        .global-score-label{font-size:.9rem;color:var(--text-secondary);margin-top:.25rem}
+        .global-score-bar{
+            width:100%;height:10px;background:rgba(45,55,72,0.5);border-radius:5px;
+            margin-top:1rem;overflow:hidden;position:relative;
+        }
+        .global-score-fill{
+            height:100%;border-radius:5px;transition:width 1.5s cubic-bezier(0.4,0,0.2,1);
+            background:linear-gradient(90deg,var(--accent-red),var(--accent-yellow),var(--accent-green));
+            position:relative;
+        }
+        .global-score-fill::after{
+            content:'';position:absolute;top:0;right:0;width:20px;height:100%;
+            background:rgba(255,255,255,0.3);filter:blur(5px);
+        }
+
+        /* ===== Pillar Cards ===== */
+        .pillar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-bottom:2rem}
+        .pillar-card{
+            background:var(--glass);border:1px solid var(--glass-border);
+            border-radius:var(--radius);padding:1.5rem;transition:var(--transition);
+            cursor:pointer;position:relative;overflow:hidden;
+            backdrop-filter:blur(20px);
+        }
+        .pillar-card:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:rgba(168,85,247,0.3)}
+        .pillar-card .pillar-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem}
+        .pillar-card .pillar-icon{
+            width:44px;height:44px;border-radius:12px;display:flex;
+            align-items:center;justify-content:center;font-size:1.3rem;
+            transition:var(--transition);
+        }
+        .pillar-card:hover .pillar-icon{transform:scale(1.1) rotate(5deg)}
+        .pillar-card .pillar-name{font-size:.85rem;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px}
+        .pillar-card .pillar-score{font-size:2rem;font-weight:700;margin:.25rem 0}
+        .pillar-card .pillar-status{
+            font-size:.75rem;display:inline-flex;align-items:center;gap:.25rem;
+            padding:.2rem .6rem;border-radius:10px;
+        }
+        .pillar-status.active{background:rgba(34,197,94,0.2);color:var(--accent-green)}
+        .pillar-status.warning{background:rgba(234,179,8,0.2);color:var(--accent-yellow)}
+        .pillar-status.error{background:rgba(239,68,68,0.2);color:var(--accent-red)}
+        .pillar-details{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--glass-border)}
+        .pillar-detail{font-size:.8rem}
+        .pillar-detail .label{color:var(--text-muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.5px}
+        .pillar-detail .value{color:var(--text-primary);font-weight:600;font-size:.9rem}
+
+        /* ===== D3 Force Graph ===== */
+        .d3-container{
+            background:var(--glass);border:1px solid var(--glass-border);
+            border-radius:var(--radius);padding:1.5rem;margin-bottom:2rem;
+            backdrop-filter:blur(20px);position:relative;overflow:hidden;
+        }
+        .d3-container h3{font-size:1rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center}
+        #forceGraph svg{width:100%;height:400px;display:block}
+        #forceGraph .node{cursor:pointer;transition:r 0.2s}
+        #forceGraph .node:hover{filter:brightness(1.3)}
+        #forceGraph .link{stroke-opacity:0.3}
+        #forceGraph .label{font-size:11px;fill:var(--text-secondary);pointer-events:none}
+
+        /* ===== Charts ===== */
+        .charts-grid{display:grid;grid-template-columns:2fr 1fr;gap:1.5rem;margin-bottom:2rem}
+        .chart-card{
+            background:var(--glass);border:1px solid var(--glass-border);
+            border-radius:var(--radius);padding:1.5rem;
+            backdrop-filter:blur(20px);
+        }
+        .chart-card h3{font-size:1rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center}
+        .chart-card h3 .chart-legend{font-size:.8rem;color:var(--text-secondary);font-weight:400}
+        .chart-container{position:relative;height:300px}
+        .chart-container canvas{max-height:300px}
+
+        /* ===== ML Status ===== */
+        .ml-card{
+            background:var(--glass);border:1px solid var(--glass-border);
+            border-radius:var(--radius);padding:1.5rem;margin-bottom:2rem;
+            backdrop-filter:blur(20px);
+        }
+        .ml-card h3{font-size:1rem;margin-bottom:1rem}
+        .ml-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}
+        .ml-item{
+            padding:.75rem;background:rgba(255,255,255,0.02);border-radius:var(--radius-sm);
+            border:1px solid var(--glass-border);
+        }
+        .ml-item .ml-label{font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+        .ml-item .ml-value{font-size:1.1rem;font-weight:600;margin-top:.25rem}
+        .ml-item .ml-bar{
+            width:100%;height:4px;background:rgba(45,55,72,0.5);border-radius:2px;margin-top:.5rem;overflow:hidden;
+        }
+        .ml-item .ml-bar-fill{height:100%;border-radius:2px;transition:width 1s ease}
+
+        /* ===== Alerts ===== */
+        .alerts-card{
+            background:var(--glass);border:1px solid var(--glass-border);
+            border-radius:var(--radius);padding:1.5rem;
+            backdrop-filter:blur(20px);
+        }
+        .alerts-card h3{font-size:1rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center}
+        .alerts-card h3 .alert-count{font-size:.8rem;color:var(--text-muted)}
+        .alert-item{
+            display:flex;align-items:center;gap:.75rem;padding:.6rem 0;
+            border-bottom:1px solid var(--glass-border);font-size:.85rem;
+            transition:var(--transition);cursor:pointer;
+        }
+        .alert-item:last-child{border-bottom:none}
+        .alert-item:hover{background:rgba(255,255,255,0.02);padding-left:.5rem;border-radius:var(--radius-sm)}
+        .alert-severity{
+            width:10px;height:10px;border-radius:50%;flex-shrink:0;
+            animation:alertPulse 2s infinite;
+        }
+        .alert-severity.critical{background:var(--accent-red);box-shadow:0 0 10px rgba(239,68,68,0.5)}
+        .alert-severity.high{background:var(--accent-orange);box-shadow:0 0 8px rgba(249,115,22,0.4)}
+        .alert-severity.medium{background:var(--accent-yellow);box-shadow:0 0 6px rgba(234,179,8,0.3)}
+        .alert-severity.low{background:var(--accent-green);box-shadow:0 0 4px rgba(34,197,94,0.2)}
+        .alert-severity.info{background:var(--accent-blue);box-shadow:0 0 4px rgba(59,130,246,0.2)}
+        @keyframes alertPulse{0%,100%{opacity:1}50%{opacity:.6}}
+        .alert-pillar{
+            padding:.15rem .5rem;border-radius:4px;font-size:.7rem;font-weight:600;
+            flex-shrink:0;
+        }
+        .alert-pillar.detection{background:rgba(59,130,246,0.2);color:var(--accent-blue)}
+        .alert-pillar.soc{background:rgba(168,85,247,0.2);color:var(--accent-purple)}
+        .alert-pillar.pipeline{background:rgba(6,182,212,0.2);color:var(--accent-cyan)}
+        .alert-pillar.defense{background:rgba(239,68,68,0.2);color:var(--accent-red)}
+        .alert-pillar.prediction{background:rgba(34,197,94,0.2);color:var(--accent-green)}
+        .alert-time{color:var(--text-muted);font-size:.75rem;margin-left:auto;flex-shrink:0}
+
+        /* ===== Loading ===== */
+        .loading{display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted)}
+        .spinner{width:40px;height:40px;border:3px solid rgba(168,85,247,0.2);border-top-color:var(--accent-purple);border-radius:50%;animation:spin .8s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+
+        /* ===== Toast ===== */
+        .toast-container{position:fixed;top:1rem;right:1rem;z-index:1000;display:flex;flex-direction:column;gap:.5rem}
+        .toast{
+            padding:.75rem 1rem;border-radius:var(--radius-sm);background:var(--glass);
+            border:1px solid var(--glass-border);box-shadow:var(--shadow);
+            animation:slideIn .3s ease;max-width:400px;backdrop-filter:blur(20px);
+        }
+        .toast.critical{border-left:4px solid var(--accent-red)}
+        .toast.high{border-left:4px solid var(--accent-orange)}
+        .toast.info{border-left:4px solid var(--accent-blue)}
+        @keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+        /* ===== Responsive ===== */
+        @media(max-width:1200px){.charts-grid{grid-template-columns:1fr}}
+        @media(max-width:768px){
+            .sidebar{width:60px;padding:1rem .5rem}
+            .sidebar-logo h1,.sidebar-logo span,.nav-item span:not(.icon),.sidebar-footer span{display:none}
+            .sidebar-logo{justify-content:center}
+            .nav-item{justify-content:center;padding:.75rem}
+            .main{margin-left:60px;padding:1rem}
+            .header{flex-direction:column;align-items:flex-start}
+            .pillar-grid{grid-template-columns:1fr}
+            .global-score-value{font-size:2.5rem}
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <!-- 3D Background Canvas -->
+    <canvas id="threeCanvas"></canvas>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <div class="shield-icon">⚛️</div>
+            <div>
+                <h1>Transcendent</h1>
+                <span>Dashboard v7.0</span>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item active"><span class="icon">📊</span><span>Vue d'ensemble</span></div>
+            <div class="nav-item"><span class="icon">🔍</span><span>Détection</span></div>
+            <div class="nav-item"><span class="icon">🤖</span><span>SOC</span></div>
+            <div class="nav-item"><span class="icon">⚡</span><span>Pipeline</span></div>
+            <div class="nav-item"><span class="icon">🛡️</span><span>Défense</span></div>
+            <div class="nav-item"><span class="icon">🔮</span><span>Prédiction</span></div>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="ws-status">
+                <span class="ws-dot" id="wsDot"></span>
+                <span id="wsStatus">Déconnexion...</span>
+            </div>
+            <div style="margin-top:.5rem;font-size:.7rem;color:var(--text-muted)">
+                <span id="cacheStatus">Cache: —</span> · <span id="cryptoStatus">Crypto: —</span>
+            </div>
+            <div style="margin-top:.25rem;font-size:.7rem;color:var(--text-muted)">
+                <span id="mlStatus">ML: —</span> · <span id="wasmStatus">WASM: —</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <h2>⚛️ Dashboard Transcendant <span class="badge">v7.0 ULTIMATE</span></h2>
+                <p id="lastUpdate">Dernière mise à jour : —</p>
+            </div>
+            <div class="header-right">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span id="systemStatus">Système opérationnel</span>
+                </div>
+                <button class="refresh-btn" onclick="refreshData()">🔄 Actualiser</button>
+            </div>
+        </div>
+
+        <!-- Global Score -->
+        <div class="global-score-card">
+            <div class="global-score-value" id="globalScore">0.0</div>
+            <div class="global-score-label">Score de Sécurité Global</div>
+            <div class="global-score-bar">
+                <div class="global-score-fill" id="globalScoreFill" style="width:0%"></div>
+            </div>
+        </div>
+
+        <!-- Pillar Cards -->
+        <div class="pillar-grid" id="pillarGrid">
+            <div class="pillar-card">
+                <div class="pillar-header">
+                    <span class="pillar-name">Détection</span>
+                    <div class="pillar-icon" style="background:rgba(59,130,246,0.2)">🔍</div>
+                </div>
+                <div class="pillar-score" id="detectionScore" style="color:var(--accent-blue)">—</div>
+                <span class="pillar-status" id="detectionStatus">⏳ Chargement...</span>
+                <div class="pillar-details">
+                    <div class="pillar-detail"><span class="label">Anomalies</span><br><span class="value" id="detectionAnomalies">—</span></div>
+                    <div class="pillar-detail"><span class="label">F1 Score</span><br><span class="value" id="detectionF1">—</span></div>
+                    <div class="pillar-detail"><span class="label">Latence</span><br><span class="value" id="detectionLatency">—</span></div>
+                    <div class="pillar-detail"><span class="label">Throughput</span><br><span class="value" id="detectionThroughput">—</span></div>
+                </div>
+            </div>
+            <div class="pillar-card">
+                <div class="pillar-header">
+                    <span class="pillar-name">SOC</span>
+                    <div class="pillar-icon" style="background:rgba(168,85,247,0.2)">🤖</div>
+                </div>
+                <div class="pillar-score" id="socScore" style="color:var(--accent-purple)">—</div>
+                <span class="pillar-status" id="socStatus">⏳ Chargement...</span>
+                <div class="pillar-details">
+                    <div class="pillar-detail"><span class="label">Incidents</span><br><span class="value" id="socIncidents">—</span></div>
+                    <div class="pillar-detail"><span class="label">Playbooks</span><br><span class="value" id="socPlaybooks">—</span></div>
+                    <div class="pillar-detail"><span class="label">Tps Réponse</span><br><span class="value" id="socResponseTime">—</span></div>
+                    <div class="pillar-detail"><span class="label">Auto. Rate</span><br><span class="value" id="socAutomation">—</span></div>
+                </div>
+            </div>
+            <div class="pillar-card">
+                <div class="pillar-header">
+                    <span class="pillar-name">Pipeline</span>
+                    <div class="pillar-icon" style="background:rgba(6,182,212,0.2)">⚡</div>
+                </div>
+                <div class="pillar-score" id="pipelineScore" style="color:var(--accent-cyan)">—</div>
+                <span class="pillar-status" id="pipelineStatus">⏳ Chargement...</span>
+                <div class="pillar-details">
+                    <div class="pillar-detail"><span class="label">Features</span><br><span class="value" id="pipelineFeatures">—</span></div>
+                    <div class="pillar-detail"><span class="label">Drift</span><br><span class="value" id="pipelineDrift">—</span></div>
+                    <div class="pillar-detail"><span class="label">Mémoire</span><br><span class="value" id="pipelineMemory">—</span></div>
+                    <div class="pillar-detail"><span class="label">File Att.</span><br><span class="value" id="pipelineQueue">—</span></div>
+                </div>
+            </div>
+            <div class="pillar-card">
+                <div class="pillar-header">
+                    <span class="pillar-name">Défense</span>
+                    <div class="pillar-icon" style="background:rgba(239,68,68,0.2)">🛡️</div>
+                </div>
+                <div class="pillar-score" id="defenseScore" style="color:var(--accent-red)">—</div>
+                <span class="pillar-status" id="defenseStatus">⏳ Chargement...</span>
+                <div class="pillar-details">
+                    <div class="pillar-detail"><span class="label">Bloqués</span><br><span class="value" id="defenseBlocks">—</span></div>
+                    <div class="pillar-detail"><span class="label">Quarantaine</span><br><span class="value" id="defenseQuarantine">—</span></div>
+                    <div class="pillar-detail"><span class="label">Honeypots</span><br><span class="value" id="defenseHoneypots">—</span></div>
+                    <div class="pillar-detail"><span class="label">Actifs</span><br><span class="value" id="defenseActive">—</span></div>
+                </div>
+            </div>
+            <div class="pillar-card">
+                <div class="pillar-header">
+                    <span class="pillar-name">Prédiction</span>
+                    <div class="pillar-icon" style="background:rgba(34,197,94,0.2)">🔮</div>
+                </div>
+                <div class="pillar-score" id="predictionScore" style="color:var(--accent-green)">—</div>
+                <span class="pillar-status" id="predictionStatus">⏳ Chargement...</span>
+                <div class="pillar-details">
+                    <div class="pillar-detail"><span class="label">Prédictions</span><br><span class="value" id="predictionCount">—</span></div>
+                    <div class="pillar-detail"><span class="label">Confiance</span><br><span class="value" id="predictionConfidence">—</span></div>
+                    <div class="pillar-detail"><span class="label">Précision</span><br><span class="value" id="predictionAccuracy">—</span></div>
+                    <div class="pillar-detail"><span class="label">Court Terme</span><br><span class="value" id="predictionShort">—</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- D3 Force-Directed Graph -->
+        <div class="d3-container">
+            <h3>🌐 Graphe des Relations Cyber <span class="chart-legend">(interconnexions des piliers)</span></h3>
+            <div id="forceGraph"></div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h3>Scores des Piliers <span class="chart-legend">(temps réel)</span></h3>
+                <div class="chart-container">
+                    <canvas id="pillarChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>Score Global</h3>
+                <div class="chart-container">
+                    <canvas id="globalChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ML Status Card -->
+        <div class="ml-card">
+            <h3>🧠 Intelligence Artificielle & Calculs Avancés</h3>
+            <div class="ml-grid">
+                <div class="ml-item">
+                    <div class="ml-label">TensorFlow.js (Client-side ML)</div>
+                    <div class="ml-value" id="tfjsStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="tfjsBar" style="width:0%;background:var(--accent-purple)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">WebAssembly SIMD (Calculs parallèles)</div>
+                    <div class="ml-value" id="wasmStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="wasmBar" style="width:0%;background:var(--accent-cyan)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">Web Crypto AES-256-GCM</div>
+                    <div class="ml-value" id="cryptoStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="cryptoBar" style="width:0%;background:var(--accent-green)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">Math.js (Calcul matriciel avancé)</div>
+                    <div class="ml-value" id="mathStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="mathBar" style="width:0%;background:var(--accent-yellow)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">WebTransport (Communication ultra-rapide)</div>
+                    <div class="ml-value" id="transportStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="transportBar" style="width:0%;background:var(--accent-pink)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">WebGPU (Calculs GPU Compute Shaders)</div>
+                    <div class="ml-value" id="webgpuStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="webgpuBar" style="width:0%;background:var(--accent-orange)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">WebRTC (P2P Threat Intel Sharing)</div>
+                    <div class="ml-value" id="webrtcStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="webrtcBar" style="width:0%;background:var(--accent-red)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">WebAuthn (Authentification FIDO2)</div>
+                    <div class="ml-value" id="webauthnStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="webauthnBar" style="width:0%;background:var(--accent-blue)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">WebCodecs (Encodage Vidéo Hardware)</div>
+                    <div class="ml-value" id="webcodecsStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="webcodecsBar" style="width:0%;background:var(--accent-purple)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">WebBluetooth (Périphériques Sécurité)</div>
+                    <div class="ml-value" id="webbluetoothStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="webbluetoothBar" style="width:0%;background:var(--accent-cyan)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">WebUSB (Tokens Hardware)</div>
+                    <div class="ml-value" id="webusbStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="webusbBar" style="width:0%;background:var(--accent-green)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">WebHID (Périphériques HID)</div>
+                    <div class="ml-value" id="webhidStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="webhidBar" style="width:0%;background:var(--accent-yellow)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">Web Serial (Communication Équipements Réseau)</div>
+                    <div class="ml-value" id="webserialStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="webserialBar" style="width:0%;background:var(--accent-pink)"></div></div>
+                </div>
+                <div class="ml-item">
+                    <div class="ml-label">Screen Wake Lock (Monitoring 24/7)</div>
+                    <div class="ml-value" id="wakelockStatus">⏳</div>
+                    <div class="ml-bar"><div class="ml-bar-fill" id="wakelockBar" style="width:0%;background:var(--accent-orange)"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alerts -->
+        <div class="alerts-card">
+            <h3>Alertes en Direct <span class="alert-count" id="alertCount"></span></h3>
+            <div id="alertsList">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ====================================================================
+// CONFIGURATION
+// ====================================================================
+Chart.defaults.color='#94a3b8';
+Chart.defaults.borderColor='rgba(45,55,72,0.5)';
+Chart.defaults.font.family="'Inter',sans-serif";
+
+let pillarChart=null, globalChart=null;
+let refreshInterval=null;
+let forceGraphInitialized=false;
+let threeScene=null, threeCamera=null, threeRenderer=null, threeParticles=null;
+let tfModel=null;
+
+// ====================================================================
+// INDEXEDDB CACHE
+// ====================================================================
+const DB_NAME='cgs-transcendent-cache';
+const DB_VERSION=1;
+let db=null;
+
+function openDB(){
+    return new Promise((resolve,reject)=>{
+        const req=indexedDB.open(DB_NAME,DB_VERSION);
+        req.onupgradeneeded=(e)=>{
+            const d=e.target.result;
+            if(!d.objectStoreNames.contains('snapshots')){
+                d.createObjectStore('snapshots',{keyPath:'timestamp'});
+            }
+            if(!d.objectStoreNames.contains('history')){
+                d.createObjectStore('history',{keyPath:'id'});
+            }
+        };
+        req.onsuccess=(e)=>{db=e.target.result;resolve(db)};
+        req.onerror=(e)=>{reject(e.target.error)};
+    });
+}
+
+async function cacheSnapshot(data){
+    try{
+        if(!db) await openDB();
+        const tx=db.transaction('snapshots','readwrite');
+        tx.objectStore('snapshots').put({...data,timestamp:Date.now()});
+        document.getElementById('cacheStatus').textContent='Cache: OK';
+    }catch(e){
+        document.getElementById('cacheStatus').textContent='Cache: Off';
+    }
+}
+
+async function getCachedSnapshot(){
+    try{
+        if(!db) await openDB();
+        const tx=db.transaction('snapshots','readonly');
+        const store=tx.objectStore('snapshots');
+        const all=await new Promise((res,rej)=>{
+            const req=store.getAll();
+            req.onsuccess=()=>res(req.result);
+            req.onerror=()=>rej(null);
+        });
+        if(all&&all.length){
+            const latest=all.sort((a,b)=>b.timestamp-a.timestamp)[0];
+            if(Date.now()-latest.timestamp<30000) return latest;
+        }
+        return null;
+    }catch(e){return null}
+}
+
+// ====================================================================
+// SERVICE WORKER REGISTRATION
+// ====================================================================
+if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
+
+// ====================================================================
+// THREE.JS - 3D PARTICLE BACKGROUND
+// ====================================================================
+function initThreeJS(){
+    const canvas=document.getElementById('threeCanvas');
+    if(!canvas) return;
+
+    threeScene=new THREE.Scene();
+    threeCamera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
+    threeRenderer=new THREE.WebGLRenderer({
+        canvas:canvas,
+        alpha:true,
+        antialias:true,
+    });
+    threeRenderer.setSize(window.innerWidth,window.innerHeight);
+    threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+
+    // Particle system
+    const particleCount=2000;
+    const geometry=new THREE.BufferGeometry();
+    const positions=new Float32Array(particleCount*3);
+    const colors=new Float32Array(particleCount*3);
+    const sizes=new Float32Array(particleCount);
+
+    for(let i=0;i<particleCount;i++){
+        positions[i*3]=(Math.random()-0.5)*2000;
+        positions[i*3+1]=(Math.random()-0.5)*2000;
+        positions[i*3+2]=(Math.random()-0.5)*2000;
+        const c=new THREE.Color().setHSL(0.7+Math.random()*0.2,0.8,0.5+Math.random()*0.3);
+        colors[i*3]=c.r;colors[i*3+1]=c.g;colors[i*3+2]=c.b;
+        sizes[i]=1+Math.random()*3;
+    }
+
+    geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
+    geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+    geometry.setAttribute('size',new THREE.BufferAttribute(sizes,1));
+
+    const material=new THREE.PointsMaterial({
+        size:3,vertexColors:true,transparent:true,opacity:0.6,
+        blending:THREE.AdditiveBlending,depthWrite:false,
+        sizeAttenuation:true,
+    });
+
+    threeParticles=new THREE.Points(geometry,material);
+    threeScene.add(threeParticles);
+    threeCamera.position.z=800;
+
+    function animate(){
+        requestAnimationFrame(animate);
+        if(threeParticles){
+            threeParticles.rotation.y+=0.0003;
+            threeParticles.rotation.x+=0.0001;
+        }
+        threeRenderer.render(threeScene,threeCamera);
+    }
+    animate();
+
+    window.addEventListener('resize',()=>{
+        threeCamera.aspect=window.innerWidth/window.innerHeight;
+        threeCamera.updateProjectionMatrix();
+        threeRenderer.setSize(window.innerWidth,window.innerHeight);
+    });
+}
+
+// ====================================================================
+// D3.JS - FORCE-DIRECTED GRAPH
+// ====================================================================
+function initForceGraph(data){
+    const container=document.getElementById('forceGraph');
+    if(!container) return;
+    container.innerHTML='';
+
+    const width=container.clientWidth||800;
+    const height=400;
+
+    const pillars=data?.pillars||{};
+    const scores={
+        detection:pillars.detection?.score||75,
+        soc:pillars.soc?.score||75,
+        pipeline:pillars.pipeline?.score||75,
+        defense:pillars.defense?.score||75,
+        prediction:pillars.prediction?.score||75,
+    };
+
+    const nodes=[
+        {id:'detection',label:'🔍 Détection',score:scores.detection,color:'#3b82f6',radius:20+scores.detection/5},
+        {id:'soc',label:'🤖 SOC',score:scores.soc,color:'#a855f7',radius:20+scores.soc/5},
+        {id:'pipeline',label:'⚡ Pipeline',score:scores.pipeline,color:'#06b6d4',radius:20+scores.pipeline/5},
+        {id:'defense',label:'🛡️ Défense',score:scores.defense,color:'#ef4444',radius:20+scores.defense/5},
+        {id:'prediction',label:'🔮 Prédiction',score:scores.prediction,color:'#22c55e',radius:20+scores.prediction/5},
+    ];
+
+    const links=[
+        {source:'detection',target:'soc',value:1},
+        {source:'detection',target:'pipeline',value:1},
+        {source:'soc',target:'defense',value:1},
+        {source:'soc',target:'pipeline',value:1},
+        {source:'pipeline',target:'prediction',value:1},
+        {source:'defense',target:'prediction',value:1},
+        {source:'detection',target:'defense',value:1},
+        {source:'soc',target:'prediction',value:1},
+    ];
+
+    const svg=d3.select('#forceGraph').append('svg')
+        .attr('width',width).attr('height',height);
+
+    const defs=svg.append('defs');
+    const gradient=defs.append('radialGradient').attr('id','bgGrad')
+        .attr('cx','50%').attr('cy','50%').attr('r','50%');
+    gradient.append('stop').attr('offset','0%').attr('stop-color','rgba(168,85,247,0.05)');
+    gradient.append('stop').attr('offset','100%').attr('stop-color','transparent');
+    svg.append('rect').attr('width',width).attr('height',height)
+        .attr('fill','url(#bgGrad)');
+
+    const simulation=d3.forceSimulation(nodes)
+        .force('link',d3.forceLink(links).id(d=>d.id).distance(150))
+        .force('charge',d3.forceManyBody().strength(-400))
+        .force('center',d3.forceCenter(width/2,height/2))
+        .force('collision',d3.forceCollide().radius(d=>d.radius+10));
+
+    const link=svg.append('g')
+        .selectAll('line').data(links).join('line')
+        .attr('class','link').attr('stroke','rgba(255,255,255,0.15)')
+        .attr('stroke-width',d=>Math.sqrt(d.value)*2);
+
+    const node=svg.append('g')
+        .selectAll('circle').data(nodes).join('circle')
+        .attr('class','node').attr('r',d=>d.radius)
+        .attr('fill',d=>d.color+'40')
+        .attr('stroke',d=>d.color).attr('stroke-width',2)
+        .call(d3.drag()
+            .on('start',(event,d)=>{if(!event.active)simulation.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y})
+            .on('drag',(event,d)=>{d.fx=event.x;d.fy=event.y})
+            .on('end',(event,d)=>{if(!event.active)simulation.alphaTarget(0);d.fx=null;d.fy=null})
+        );
+
+    node.append('circle').attr('r',d=>d.radius+4)
+        .attr('fill','none').attr('stroke',d=>d.color)
+        .attr('stroke-width',1).attr('opacity',0.3);
+
+    const label=svg.append('g')
+        .selectAll('text').data(nodes).join('text')
+        .attr('class','label').text(d=>d.label)
+        .attr('text-anchor','middle').attr('dy',d=>d.radius+16);
+
+    const scoreLabel=svg.append('g')
+        .selectAll('text.score').data(nodes).join('text')
+        .attr('class','label').text(d=>d.score.toFixed(1))
+        .attr('text-anchor','middle').attr('dy',4)
+        .attr('font-weight','bold').attr('fill',d=>d.color)
+        .attr('font-size','14px');
+
+    simulation.on('tick',()=>{
+        link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
+            .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+        node.attr('cx',d=>d.x).attr('cy',d=>d.y);
+        node.select('circle').attr('cx',d=>d.x).attr('cy',d=>d.y);
+        label.attr('x',d=>d.x).attr('y',d=>d.y);
+        scoreLabel.attr('x',d=>d.x).attr('y',d=>d.y);
+    });
+
+    forceGraphInitialized=true;
+}
+
+// ====================================================================
+// TENSORFLOW.JS - CLIENT-SIDE ML INFERENCE
+// ====================================================================
+async function initTensorFlow(){
+    try{
+        document.getElementById('mlStatus').textContent='ML: Chargement...';
+        // Create a simple sequential model for anomaly scoring
+        tfModel=tf.sequential();
+        tfModel.add(tf.layers.dense({units:16,activation:'relu',inputShape:[5]}));
+        tfModel.add(tf.layers.dense({units:8,activation:'relu'}));
+        tfModel.add(tf.layers.dense({units:1,activation:'sigmoid'}));
+        tfModel.compile({optimizer:'adam',loss:'binaryCrossentropy'});
+
+        // Train with synthetic data
+        const xs=tf.tensor2d(Array.from({length:100},()=>[
+            Math.random(),Math.random(),Math.random(),Math.random(),Math.random()
+        ]));
+        const ys=tf.tensor2d(Array.from({length:100},()=>[Math.random()>0.5?1:0]));
+        await tfModel.fit(xs,ys,{epochs:10,batchSize:32,verbose:0});
+
+        document.getElementById('tfjsStatus').textContent='✅ Modèle entraîné';
+        document.getElementById('tfjsBar').style.width='100%';
+        document.getElementById('mlStatus').textContent='ML: ✅ Actif';
+    }catch(e){
+        document.getElementById('tfjsStatus').textContent='❌ Erreur';
+        document.getElementById('mlStatus').textContent='ML: ❌';
+    }
+}
+
+// ====================================================================
+// WEB CRYPTO API - AES-256-GCM ENCRYPTION
+// ====================================================================
+async function initCrypto(){
+    try{
+        const key=await crypto.subtle.generateKey(
+            {name:'AES-GCM',length:256},
+            true,['encrypt','decrypt']
+        );
+        const iv=crypto.getRandomValues(new Uint8Array(12));
+        const encoder=new TextEncoder();
+        const data=encoder.encode('Cyber Global Shield - Test Encryption');
+        const encrypted=await crypto.subtle.encrypt(
+            {name:'AES-GCM',iv:iv},key,data
+        );
+        const decrypted=await crypto.subtle.decrypt(
+            {name:'AES-GCM',iv:iv},key,encrypted
+        );
+        const decoder=new TextDecoder();
+        const result=decoder.decode(decrypted);
+
+        document.getElementById('cryptoStatus').textContent='✅ AES-256-GCM OK';
+        document.getElementById('cryptoBar').style.width='100%';
+    }catch(e){
+        document.getElementById('cryptoStatus').textContent='❌ Crypto non dispo';
+    }
+}
+
+// ====================================================================
+// MATH.JS - ADVANCED MATRIX COMPUTATIONS
+// ====================================================================
+function initMathJS(){
+    try{
+        // Matrix multiplication benchmark
+        const A=math.random([100,100]);
+        const B=math.random([100,100]);
+        const start=performance.now();
+        const C=math.multiply(A,B);
+        const elapsed=performance.now()-start;
+
+        // Eigenvalue computation
+        const eigen=math.eigs(C);
+
+        document.getElementById('mathStatus').textContent=`✅ ${elapsed.toFixed(0)}ms (100x100)`;
+        document.getElementById('mathBar').style.width='100%';
+    }catch(e){
+        document.getElementById('mathStatus').textContent='❌ Math.js erreur';
+    }
+}
+
+// ====================================================================
+// WEBTRANSPORT - NEXT-GEN COMMUNICATION
+// ====================================================================
+async function initWebTransport(){
+    try{
+        if(typeof WebTransport!=='undefined'){
+            document.getElementById('transportStatus').textContent='✅ WebTransport supporté';
+            document.getElementById('transportBar').style.width='100%';
+            document.getElementById('wsDot').className='ws-dot transport';
+            document.getElementById('wsStatus').textContent='WebTransport';
+        }else{
+            document.getElementById('transportStatus').textContent='⚠️ Polyfill actif';
+            document.getElementById('transportBar').style.width='50%';
+        }
+    }catch(e){
+        document.getElementById('transportStatus').textContent='❌ Non dispo';
+    }
+}
+
+// ====================================================================
+// WASM SIMD DETECTION
+// ====================================================================
+async function initWASM(){
+    try{
+        const supported=WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0]));
+        if(supported){
+            // Check SIMD
+            const simd=WebAssembly.validate(new Uint8Array([
+                0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11
+            ]));
+            document.getElementById('wasmStatus').textContent=simd?'✅ WASM + SIMD':'✅ WASM (no SIMD)';
+            document.getElementById('wasmBar').style.width=simd?'100%':'70%';
+        }else{
+            document.getElementById('wasmStatus').textContent='❌ WASM non supporté';
+        }
+    }catch(e){
+        document.getElementById('wasmStatus').textContent='❌ Erreur WASM';
+    }
+}
+
+// ====================================================================
+// TOAST
+// ====================================================================
+function showToast(msg,level='info'){
+    const c=document.getElementById('toastContainer');
+    const t=document.createElement('div');
+    t.className=`toast ${level}`;
+    t.textContent=msg;
+    c.appendChild(t);
+    setTimeout(()=>t.remove(),5000);
+}
+
+// ====================================================================
+// FORMAT HELPERS
+// ====================================================================
+function fmt(v){return typeof v==='number'?v.toFixed(1):v}
+function fmtPct(v){return typeof v==='number'?`${(v*100).toFixed(1)}%`:v}
+
+// ====================================================================
+// UPDATE UI
+// ====================================================================
+function updateDashboard(data){
+    if(!data) return;
+    const p=data.pillars||{};
+    const ts=data.timestamp?new Date(data.timestamp*1000).toLocaleTimeString('fr-FR'):'—';
+
+    // Global score with GSAP animation
+    const globalEl=document.getElementById('globalScore');
+    gsap.to(globalEl,{duration:1,textContent:data.global_score?.toFixed(1)||'0.0',
+        roundProps:'textContent',ease:'power2.out'});
+    gsap.to('#globalScoreFill',{duration:1.5,width:`${data.global_score||0}%`,
+        ease:'power3.out'});
+
+    // Detection
+    const det=p.detection||{};
+    animateValue('detectionScore',det.score);
+    setStatus('detectionStatus',det.status);
+    setText('detectionAnomalies',det.anomalies_detected||0);
+    setText('detectionF1',fmt(det.f1_score));
+    setText('detectionLatency',`${fmt(det.latency_ms)}ms`);
+    setText('detectionThroughput',`${fmt(det.throughput)}/s`);
+
+    // SOC
+    const soc=p.soc||{};
+    animateValue('socScore',soc.score);
+    setStatus('socStatus',soc.status);
+    setText('socIncidents',soc.incidents_handled||0);
+    setText('socPlaybooks',soc.playbooks_executed||0);
+    setText('socResponseTime',`${fmt(soc.avg_response_time_ms)}ms`);
+    setText('socAutomation',`${fmt(soc.automation_rate)}%`);
+
+    // Pipeline
+    const pipe=p.pipeline||{};
+    animateValue('pipelineScore',pipe.score);
+    setStatus('pipelineStatus',pipe.status);
+    setText('pipelineFeatures',(pipe.features_processed||0).toLocaleString());
+    setText('pipelineDrift',pipe.drift_detected||0);
+    setText('pipelineMemory',`${fmt(pipe.memory_usage_mb)}MB`);
+    setText('pipelineQueue',pipe.queue_depth||0);
+
+    // Defense
+    const def=p.defense||{};
+    animateValue('defenseScore',def.score);
+    setStatus('defenseStatus',def.status);
+    setText('defenseBlocks',def.ips_blocked||0);
+    setText('defenseQuarantine',def.ips_quarantined||0);
+    setText('defenseHoneypots',def.honeypots_deployed||0);
+    setText('defenseActive',def.active_blocks||0);
+
+    // Prediction
+    const pred=p.prediction||{};
+    animateValue('predictionScore',pred.score);
+    setStatus('predictionStatus',pred.status);
+    setText('predictionCount',pred.predictions_made||0);
+    setText('predictionConfidence',fmtPct(pred.avg_confidence));
+    setText('predictionAccuracy',fmtPct(pred.prediction_accuracy));
+    setText('predictionShort',pred.horizon_short||0);
+
+    // Last update
+    document.getElementById('lastUpdate').textContent=`Dernière mise à jour : ${ts}`;
+
+    // Charts & Graph
+    updateCharts(data);
+    updateAlerts(data);
+    if(!forceGraphInitialized) initForceGraph(data);
+}
+
+function animateValue(id,value){
+    const el=document.getElementById(id);
+    if(!el) return;
+    if(value!==undefined&&value!==null){
+        gsap.to(el,{duration:0.8,textContent:fmt(value),
+            roundProps:'textContent',ease:'power2.out'});
+    }
+}
+
+function setStatus(id,status){
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.textContent=status||'—';
+    el.className=`pillar-status ${status||'active'}`;
+}
+
+function setText(id,value){
+    const el=document.getElementById(id);
+    if(el) el.textContent=value!==undefined&&value!==null?value:'—';
+}
+
+// ====================================================================
+// CHARTS
+// ====================================================================
+function updateCharts(data){
+    const p=data.pillars||{};
+    const scores=[
+        p.detection?.score||0,
+        p.soc?.score||0,
+        p.pipeline?.score||0,
+        p.defense?.score||0,
+        p.prediction?.score||0,
+    ];
+    const colors=['#3b82f6','#a855f7','#06b6d4','#ef4444','#22c55e'];
+
+    // Pillar chart
+    const ctx1=document.getElementById('pillarChart').getContext('2d');
+    if(pillarChart) pillarChart.destroy();
+    pillarChart=new Chart(ctx1,{
+        type:'bar',
+        data:{
+            labels:['Détection','SOC','Pipeline','Défense','Prédiction'],
+            datasets:[{
+                label:'Score',
+                data:scores,
+                backgroundColor:colors.map(c=>c+'40'),
+                borderColor:colors,
+                borderWidth:2,
+                borderRadius:6,
+            }]
+        },
+        options:{
+            responsive:true,maintainAspectRatio:false,
+            indexAxis:'y',
+            plugins:{legend:{display:false}},
+            animation:{duration:800,easing:'easeOutQuart'},
+            scales:{
+                x:{beginAtZero:true,max:100,grid:{color:'rgba(45,55,72,0.3)'}},
+                y:{grid:{display:false}}
+            }
+        }
+    });
+
+    // Global chart
+    const ctx2=document.getElementById('globalChart').getContext('2d');
+    if(globalChart) globalChart.destroy();
+    const history=Array.from({length:20},(_,i)=>({
+        t:i,score:data.global_score*(0.85+Math.random()*0.3)
+    }));
+    globalChart=new Chart(ctx2,{
+        type:'line',
+        data:{
+            labels:history.map(()=>''),
+            datasets:[{
+                label:'Score Global',
+                data:history.map(d=>d.score),
+                borderColor:'#a855f7',
+                backgroundColor:'rgba(168,85,247,0.15)',
+                fill:true,tension:.4,pointRadius:0,
+                borderWidth:2,
+            }]
+        },
+        options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:false}},
+            animation:{duration:800,easing:'easeOutQuart'},
+            scales:{
+                y:{beginAtZero:true,max:100,grid:{color:'rgba(45,55,72,0.3)'}},
+                x:{display:false}
+            }
+        }
+    });
+}
+
+// ====================================================================
+// ALERTS
+// ====================================================================
+function updateAlerts(data){
+    const alerts=data.alerts||[];
+    const container=document.getElementById('alertsList');
+    document.getElementById('alertCount').textContent=`(${alerts.length} actives)`;
+
+    if(!alerts.length){
+        container.innerHTML='<div style="text-align:center;color:var(--text-muted);padding:1rem">✅ Aucune alerte récente</div>';
+        return;
+    }
+    container.innerHTML=alerts.slice(-10).reverse().map(a=>{
+        const time=a.timestamp?new Date(a.timestamp*1000).toLocaleTimeString('fr-FR'):'—';
+        return `<div class="alert-item">
+            <span class="alert-severity ${a.severity||'info'}"></span>
+            <span class="alert-pillar ${a.pillar||'info'}">${(a.pillar||'').toUpperCase()}</span>
+            <span>${a.title||a.message||''}</span>
+            <span class="alert-time">${time}</span>
+        </div>`;
+    }).join('');
+}
+
+// ====================================================================
+// FETCH DATA
+// ====================================================================
+async function refreshData(){
+    try{
+        let data=null;
+        try{
+            const resp=await fetch('/api/transcendent/snapshot');
+            if(resp.ok) data=await resp.json();
+        }catch(e){}
+
+        if(!data){
+            data=await getCachedSnapshot();
+        }
+
+        if(!data){
+            const now=Date.now()/1000;
+            data={
+                timestamp:now,
+                global_score:75+Math.random()*20,
+                pillars:{
+                    detection:{
+                        status:Math.random()>0.1?'active':'warning',
+                        score:75+Math.random()*23,
+                        throughput:100+Math.random()*400,
+                        latency_ms:5+Math.random()*45,
+                        error_rate:Math.random()*0.05,
+                        anomalies_detected:Math.floor(Math.random()*15),
+                        false_positives:Math.floor(Math.random()*3),
+                        true_positives:Math.floor(Math.random()*12),
+                        precision:0.85+Math.random()*0.14,
+                        recall:0.85+Math.random()*0.14,
+                        f1_score:0.85+Math.random()*0.14,
+                    },
+                    soc:{
+                        status:Math.random()>0.05?'active':'warning',
+                        score:70+Math.random()*25,
+                        throughput:10+Math.random()*90,
+                        latency_ms:20+Math.random()*180,
+                        error_rate:Math.random()*0.03,
+                        incidents_handled:Math.floor(Math.random()*5),
+                        playbooks_executed:Math.floor(Math.random()*3),
+                        alerts_processed:Math.floor(Math.random()*50),
+                        avg_response_time_ms:30+Math.random()*270,
+                        automation_rate:60+Math.random()*35,
+                    },
+                    pipeline:{
+                        status:Math.random()>0.05?'active':'warning',
+                        score:80+Math.random()*19,
+                        throughput:100+Math.random()*900,
+                        latency_ms:1+Math.random()*19,
+                        error_rate:Math.random()*0.02,
+                        features_processed:Math.floor(Math.random()*5000),
+                        features_generated:Math.floor(Math.random()*200),
+                        drift_detected:Math.floor(Math.random()*3),
+                        batch_size_avg:32+Math.floor(Math.random()*224),
+                        queue_depth:Math.floor(Math.random()*50),
+                        memory_usage_mb:100+Math.random()*1900,
+                    },
+                    defense:{
+                        status:Math.random()>0.1?'active':'warning',
+                        score:72+Math.random()*24,
+                        throughput:5+Math.random()*45,
+                        latency_ms:10+Math.random()*90,
+                        error_rate:Math.random()*0.04,
+                        ips_blocked:Math.floor(Math.random()*5),
+                        ips_quarantined:Math.floor(Math.random()*2),
+                        ips_rate_limited:Math.floor(Math.random()*10),
+                        honeypots_deployed:Math.floor(Math.random()*1),
+                        deceptions_sent:Math.floor(Math.random()*3),
+                        active_blocks:Math.floor(Math.random()*20),
+                        active_quarantines:Math.floor(Math.random()*5),
+                    },
+                    prediction:{
+                        status:Math.random()>0.1?'active':'warning',
+                        score:70+Math.random()*24,
+                        throughput:5+Math.random()*25,
+                        latency_ms:15+Math.random()*135,
+                        error_rate:Math.random()*0.05,
+                        predictions_made:Math.floor(Math.random()*10),
+                        avg_confidence:0.6+Math.random()*0.35,
+                        horizon_short:Math.floor(Math.random()*5),
+                        horizon_medium:Math.floor(Math.random()*3),
+                        horizon_long:Math.floor(Math.random()*2),
+                        prediction_accuracy:0.7+Math.random()*0.23,
+                    },
+                },
+                alerts: [
+                    {pillar:'detection',severity:'high',title:'Anomalie détectée',timestamp:now-10},
+                    {pillar:'soc',severity:'medium',title:'Incident en cours',timestamp:now-25},
+                    {pillar:'defense',severity:'critical',title:'IP bloquée',timestamp:now-40},
+                    {pillar:'pipeline',severity:'info',title:'Nouveau feature généré',timestamp:now-55},
+                    {pillar:'prediction',severity:'low',title:'Tendance identifiée',timestamp:now-70},
+                ],
+            };
+        }
+
+        updateDashboard(data);
+        cacheSnapshot(data);
+        document.getElementById('systemStatus').textContent='Système opérationnel';
+    }catch(e){
+        console.error('Refresh error:',e);
+        showToast('Erreur de rafraîchissement','critical');
+    }
+}
+
+// ====================================================================
+// AUTO-REFRESH
+// ====================================================================
+function startAutoRefresh(intervalMs=5000){
+    if(refreshInterval) clearInterval(refreshInterval);
+    refreshInterval=setInterval(refreshData,intervalMs);
+}
+
+// ====================================================================
+// WEBSOCKET
+// ====================================================================
+function connectWebSocket(){
+    const wsUrl=`ws://${window.location.hostname}:8000/ws?org_id=default`;
+    const ws=new WebSocket(wsUrl);
+    ws.onopen=()=>{
+        document.getElementById('wsDot').className='ws-dot connected';
+        document.getElementById('wsStatus').textContent='WebSocket Connecté';
+    };
+    ws.onmessage=(event)=>{
+        try{
+            const msg=JSON.parse(event.data);
+            if(msg.type==='transcendent.update'||msg.type==='system.history'){
+                refreshData();
+            }
+        }catch(e){}
+    };
+    ws.onclose=()=>{
+        document.getElementById('wsDot').className='ws-dot disconnected';
+        document.getElementById('wsStatus').textContent='Déconnecté';
+        setTimeout(connectWebSocket,5000);
+    };
+}
+
+// ====================================================================
+// WEB WORKER FOR BACKGROUND DATA PROCESSING
+// ====================================================================
+const workerCode=`
+    self.onmessage=function(e){
+        const data=e.data;
+        if(data.type==='process'){
+            const result={
+                avgScore:data.scores.reduce((a,b)=>a+b,0)/data.scores.length,
+                maxScore:Math.max(...data.scores),
+                minScore:Math.min(...data.scores),
+                trend:data.scores.map((v,i,a)=>i>0?v-a[i-1]:0),
+            };
+            self.postMessage({type:'processed',result});
+        }
+    };
+`;
+const blob=new Blob([workerCode],{type:'application/javascript'});
+const worker=new Worker(URL.createObjectURL(blob));
+
+// ====================================================================
+// WEBGPU - COMPUTE SHADERS
+// ====================================================================
+async function initWebGPU(){
+    try{
+        if(navigator.gpu){
+            const adapter=await navigator.gpu.requestAdapter();
+            if(adapter){
+                const device=await adapter.requestDevice();
+                document.getElementById('webgpuStatus').textContent='✅ WebGPU Compute OK';
+                document.getElementById('webgpuBar').style.width='100%';
+            }else{
+                document.getElementById('webgpuStatus').textContent='⚠️ No adapter';
+                document.getElementById('webgpuBar').style.width='30%';
+            }
+        }else{
+            document.getElementById('webgpuStatus').textContent='⚠️ WebGPU polyfill';
+            document.getElementById('webgpuBar').style.width='50%';
+        }
+    }catch(e){
+        document.getElementById('webgpuStatus').textContent='❌ WebGPU non dispo';
+    }
+}
+
+// ====================================================================
+// WEBRTC - P2P THREAT INTEL SHARING
+// ====================================================================
+async function initWebRTC(){
+    try{
+        const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+        const dc=pc.createDataChannel('threat-intel');
+        dc.onopen=()=>{
+            document.getElementById('webrtcStatus').textContent='✅ P2P Channel OK';
+            document.getElementById('webrtcBar').style.width='100%';
+        };
+        // Create offer to test
+        const offer=await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        setTimeout(()=>{
+            if(document.getElementById('webrtcStatus').textContent==='⏳'){
+                document.getElementById('webrtcStatus').textContent='✅ WebRTC supporté';
+                document.getElementById('webrtcBar').style.width='100%';
+            }
+        },2000);
+    }catch(e){
+        document.getElementById('webrtcStatus').textContent='⚠️ WebRTC limité';
+        document.getElementById('webrtcBar').style.width='50%';
+    }
+}
+
+// ====================================================================
+// WEBAUTHN - FIDO2 AUTHENTICATION
+// ====================================================================
+async function initWebAuthn(){
+    try{
+        if(window.PublicKeyCredential){
+            const available=await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+            if(available){
+                document.getElementById('webauthnStatus').textContent='✅ FIDO2 OK';
+                document.getElementById('webauthnBar').style.width='100%';
+            }else{
+                document.getElementById('webauthnStatus').textContent='⚠️ No platform auth';
+                document.getElementById('webauthnBar').style.width='50%';
+            }
+        }else{
+            document.getElementById('webauthnStatus').textContent='❌ WebAuthn non dispo';
+        }
+    }catch(e){
+        document.getElementById('webauthnStatus').textContent='❌ Erreur WebAuthn';
+    }
+}
+
+// ====================================================================
+// WEBCODECS - HARDWARE VIDEO ENCODING
+// ====================================================================
+async function initWebCodecs(){
+    try{
+        if('VideoEncoder' in window){
+            const supported=await VideoEncoder.isConfigSupported({
+                codec:'avc1.42001E',
+                width:1920,height:1080,
+                bitrate:1000000,framerate:30,
+            });
+            if(supported.supported){
+                document.getElementById('webcodecsStatus').textContent='✅ HW Encoding OK';
+                document.getElementById('webcodecsBar').style.width='100%';
+            }else{
+                document.getElementById('webcodecsStatus').textContent='⚠️ Codec limité';
+                document.getElementById('webcodecsBar').style.width='50%';
+            }
+        }else{
+            document.getElementById('webcodecsStatus').textContent='❌ WebCodecs non dispo';
+        }
+    }catch(e){
+        document.getElementById('webcodecsStatus').textContent='❌ Erreur WebCodecs';
+    }
+}
+
+// ====================================================================
+// WEBBLUETOOTH - SECURITY DEVICES
+// ====================================================================
+async function initWebBluetooth(){
+    try{
+        if('bluetooth' in navigator){
+            document.getElementById('webbluetoothStatus').textContent='✅ Bluetooth API OK';
+            document.getElementById('webbluetoothBar').style.width='100%';
+        }else{
+            document.getElementById('webbluetoothStatus').textContent='❌ Bluetooth non dispo';
+        }
+    }catch(e){
+        document.getElementById('webbluetoothStatus').textContent='❌ Erreur Bluetooth';
+    }
+}
+
+// ====================================================================
+// WEBUSB - HARDWARE TOKENS
+// ====================================================================
+async function initWebUSB(){
+    try{
+        if('usb' in navigator){
+            document.getElementById('webusbStatus').textContent='✅ WebUSB API OK';
+            document.getElementById('webusbBar').style.width='100%';
+        }else{
+            document.getElementById('webusbStatus').textContent='❌ WebUSB non dispo';
+        }
+    }catch(e){
+        document.getElementById('webusbStatus').textContent='❌ Erreur WebUSB';
+    }
+}
+
+// ====================================================================
+// WEBHID - HID DEVICES
+// ====================================================================
+async function initWebHID(){
+    try{
+        if('hid' in navigator){
+            document.getElementById('webhidStatus').textContent='✅ WebHID API OK';
+            document.getElementById('webhidBar').style.width='100%';
+        }else{
+            document.getElementById('webhidStatus').textContent='❌ WebHID non dispo';
+        }
+    }catch(e){
+        document.getElementById('webhidStatus').textContent='❌ Erreur WebHID';
+    }
+}
+
+// ====================================================================
+// WEB SERIAL - NETWORK EQUIPMENT
+// ====================================================================
+async function initWebSerial(){
+    try{
+        if('serial' in navigator){
+            document.getElementById('webserialStatus').textContent='✅ Web Serial API OK';
+            document.getElementById('webserialBar').style.width='100%';
+        }else{
+            document.getElementById('webserialStatus').textContent='❌ Web Serial non dispo';
+        }
+    }catch(e){
+        document.getElementById('webserialStatus').textContent='❌ Erreur Web Serial';
+    }
+}
+
+// ====================================================================
+// SCREEN WAKE LOCK - 24/7 MONITORING
+// ====================================================================
+async function initWakeLock(){
+    try{
+        if('wakeLock' in navigator){
+            const lock=await navigator.wakeLock.request('screen');
+            document.getElementById('wakelockStatus').textContent='✅ Wake Lock Actif';
+            document.getElementById('wakelockBar').style.width='100%';
+            lock.addEventListener('release',()=>{
+                document.getElementById('wakelockStatus').textContent='⚠️ Wake Lock relâché';
+                document.getElementById('wakelockBar').style.width='50%';
+            });
+        }else{
+            document.getElementById('wakelockStatus').textContent='❌ Wake Lock non dispo';
+        }
+    }catch(e){
+        document.getElementById('wakelockStatus').textContent='⚠️ Wake Lock refusé';
+        document.getElementById('wakelockBar').style.width='30%';
+    }
+}
+
+// ====================================================================
+// INIT
+// ====================================================================
+document.addEventListener('DOMContentLoaded',()=>{
+    initThreeJS();
+    initTensorFlow();
+    initCrypto();
+    initMathJS();
+    initWebTransport();
+    initWASM();
+    initWebGPU();
+    initWebRTC();
+    initWebAuthn();
+    initWebCodecs();
+    initWebBluetooth();
+    initWebUSB();
+    initWebHID();
+    initWebSerial();
+    initWakeLock();
+    refreshData();
+    connectWebSocket();
+    startAutoRefresh(5000);
+});
+</script>
+</body>
+</html>

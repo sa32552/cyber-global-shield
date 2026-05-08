@@ -1,0 +1,117 @@
+# Cyber Global Shield - Suricata Configuration
+# High-performance IDS/IPS with EVE JSON output for SIEM integration
+
+# Max memory
+max-pending-packets: 1024
+runmode: autofp
+
+# Default packet size
+default-packet-size: 1514
+
+# Outputs
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: /var/log/suricata/eve.json
+      level: Info
+      types:
+        - alert:
+            payload: yes
+            payload-printable: yes
+            packet: yes
+            metadata: yes
+            tagged-packets: yes
+        - http:
+            extended: yes
+        - dns:
+            version: 2
+        - tls:
+            extended: yes
+        - files:
+            force-magic: yes
+            force-hash: [md5, sha256]
+        - smb:
+            enabled: yes
+        - ssh:
+            enabled: yes
+        - flow:
+            enabled: yes
+        - netflow:
+            enabled: yes
+        - anomaly:
+            enabled: yes
+            types: [decode, stream, applayer]
+
+# Detection
+af-packet:
+  - interface: eth0
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+    use-mmap: yes
+    tpacket-v3: yes
+
+# App Layer
+app-layer:
+  protocols:
+    tls:
+      enabled: yes
+      detection-ports:
+        dp: 443
+    dns:
+      enabled: yes
+      udp:
+        enabled: yes
+        detection-ports:
+          dp: 53
+      tcp:
+        enabled: yes
+        detection-ports:
+          dp: 53
+    http:
+      enabled: yes
+    smb:
+      enabled: yes
+      detection-ports:
+        dp: 445, 139
+    ssh:
+      enabled: yes
+      detection-ports:
+        dp: 22
+    ftp:
+      enabled: yes
+
+# Rules
+default-rule-path: /etc/suricata/rules
+rule-files:
+  - emerging-trojan.rules
+  - emerging-malware.rules
+  - emerging-exploit.rules
+  - emerging-scan.rules
+  - emerging-web_server.rules
+  - emerging-web_client.rules
+  - emerging-dns.rules
+  - emerging-activex.rules
+  - emerging-attack_response.rules
+  - emerging-current_events.rules
+  - emerging-icmp.rules
+  - emerging-shellcode.rules
+  - emerging-policy.rules
+  - emerging-user_agents.rules
+  - emerging-voip.rules
+
+classification-file: /etc/suricata/classification.config
+reference-config-file: /etc/suricata/reference.config
+
+# Thresholds
+threshold-file: /etc/suricata/threshold.config
+
+# Profiling
+profiling:
+  rules:
+    enabled: yes
+    sort: ticks_per_check
+    limit: 100
+  keywords:
+    enabled: yes

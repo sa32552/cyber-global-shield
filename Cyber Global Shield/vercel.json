@@ -1,0 +1,43 @@
+{
+    "version": 2,
+    "name": "cyber-global-shield",
+    "builds": [
+        {
+            "src": "apps/web/**",
+            "use": "@vercel/static"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/",
+            "dest": "/apps/web/index.html"
+        },
+        {
+            "src": "/dashboard",
+            "dest": "/apps/web/index.html"
+        },
+        {
+            "src": "/transcendent",
+            "dest": "/apps/web/transcendent_dashboard.html"
+        },
+        {
+            "src": "/threat-map",
+            "dest": "/apps/web/threat_map.html"
+        },
+        {
+            "src": "/api/(.*)",
+            "dest": "https://cyber-global-shield-backend.onrender.com/api/$1"
+        }
+    ],
+    "headers": [
+        {
+            "source": "/apps/web/(.*)",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=31536000, immutable"
+                }
+            ]
+        }
+    ]
+}

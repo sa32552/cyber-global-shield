@@ -1,0 +1,163 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cgs.fullname" . }}
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.app.autoscaling.enabled }}
+  replicas: {{ .Values.app.replicaCount }}
+  {{- end }}
+  strategy:
+    {{- toYaml .Values.app.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "cgs.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.app.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "cgs.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "cgs.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.app.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.app.securityContext | nindent 12 }}
+          image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.app.service.port }}
+              protocol: TCP
+          env:
+            {{- toYaml .Values.app.env | nindent 12 }}
+          envFrom:
+            {{- toYaml .Values.app.envFrom | nindent 12 }}
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.app.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.app.readinessProbe | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.app.startupProbe | nindent 12 }}
+          volumeMounts:
+            {{- toYaml .Values.app.volumeMounts | nindent 12 }}
+      volumes:
+        {{- toYaml .Values.app.volumes | nindent 8 }}
+      {{- with .Values.app.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.app.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.app.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cgs.fullname" . }}-ml
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ml
+spec:
+  {{- if not .Values.ml.autoscaling.enabled }}
+  replicas: {{ .Values.ml.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cgs.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ml
+  template:
+    metadata:
+      labels:
+        {{- include "cgs.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ml
+    spec:
+      containers:
+        - name: ml
+          image: "{{ .Values.ml.image.repository }}:{{ .Values.ml.image.tag }}"
+          imagePullPolicy: {{ .Values.ml.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.ml.service.port }}
+          env:
+            {{- toYaml .Values.ml.env | nindent 12 }}
+          resources:
+            {{- toYaml .Values.ml.resources | nindent 12 }}
+          volumeMounts:
+            {{- toYaml .Values.ml.volumeMounts | nindent 12 }}
+      volumes:
+        {{- toYaml .Values.ml.volumes | nindent 8 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cgs.fullname" . }}-soar
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: soar
+spec:
+  {{- if not .Values.soar.autoscaling.enabled }}
+  replicas: {{ .Values.soar.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cgs.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: soar
+  template:
+    metadata:
+      labels:
+        {{- include "cgs.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: soar
+    spec:
+      containers:
+        - name: soar
+          image: "{{ .Values.soar.image.repository }}:{{ .Values.soar.image.tag }}"
+          imagePullPolicy: {{ .Values.soar.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.soar.service.port }}
+          resources:
+            {{- toYaml .Values.soar.resources | nindent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cgs.fullname" . }}-fl
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fl
+spec:
+  replicas: {{ .Values.fl.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cgs.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: fl
+  template:
+    metadata:
+      labels:
+        {{- include "cgs.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: fl
+    spec:
+      containers:
+        - name: fl
+          image: "{{ .Values.fl.image.repository }}:{{ .Values.fl.image.tag }}"
+          imagePullPolicy: {{ .Values.fl.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.fl.service.port }}
+          resources:
+            {{- toYaml .Values.fl.resources | nindent 12 }}

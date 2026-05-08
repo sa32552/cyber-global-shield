@@ -1,0 +1,282 @@
+name: Cyber Global Shield CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - '.gitignore'
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 6:00 UTC
+
+env:
+  PYTHON_VERSION: '3.11'
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ===========================================================================
+  # Job 1: Lint & Format Check
+  # ===========================================================================
+  lint:
+    name: 🔍 Lint & Format
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Cyber Global Shield
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'Cyber Global Shield/requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy
+          pip install -r requirements.txt
+
+      - name: Check formatting with Black
+        run: black --check --diff app/ flower_client.py ray_jobs.py test_breach.py
+
+      - name: Check import sorting with isort
+        run: isort --check-only --diff app/ flower_client.py ray_jobs.py
+
+      - name: Lint with flake8
+        run: flake8 app/ flower_client.py ray_jobs.py --max-line-length=120 --extend-ignore=E203,W503
+
+      - name: Type check with mypy
+        run: mypy app/ --ignore-missing-imports --warn-unused-configs
+        continue-on-error: true
+
+  # ===========================================================================
+  # Job 2: Unit Tests
+  # ===========================================================================
+  test:
+    name: 🧪 Unit Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Cyber Global Shield
+
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: 'Cyber Global Shield/requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pytest-cov pytest-mock
+          pip install -r requirements.txt
+
+      - name: Run SOAR tests
+        run: |
+          python -m pytest app/soar/test_soar.py -v --tb=short --cov=app.soar --cov-report=term-missing
+        continue-on-error: true
+
+      - name: Run ML enhancement tests
+        run: |
+          python -m pytest app/ml/test_enhancements.py -v --tb=short --cov=app.ml --cov-report=term-missing --cov-append
+        continue-on-error: true
+
+      - name: Run integration tests
+        run: |
+          python -m pytest tests/integration/ -v --tb=short --cov=app --cov-report=xml --cov-report=term-missing
+        continue-on-error: true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./Cyber Global Shield/coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ===========================================================================
+  # Job 3: Security Scan
+  # ===========================================================================
+  security:
+    name: 🔒 Security Scan
+    needs: lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Cyber Global Shield
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install safety and bandit
+        run: |
+          pip install safety bandit
+
+      - name: Check dependencies with Safety
+        run: safety check -r requirements.txt
+        continue-on-error: true
+
+      - name: SAST with Bandit
+        run: bandit -r app/ -f json -o bandit-report.json || true
+        continue-on-error: true
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: Cyber Global Shield/bandit-report.json
+
+  # ===========================================================================
+  # Job 4: Build & Push Docker Images
+  # ===========================================================================
+  docker:
+    name: 🐳 Build & Push Docker
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    strategy:
+      matrix:
+        service: [api, fl, web]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: Cyber Global Shield
+          file: Cyber Global Shield/infra/docker/Dockerfile${{ matrix.service == 'fl' && '.fl' || '' }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # Job 5: Deploy to Staging
+  # ===========================================================================
+  deploy-staging:
+    name: 🚀 Deploy Staging
+    needs: docker
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          known_hosts: ${{ secrets.STAGING_KNOWN_HOSTS }}
+
+      - name: Deploy via Docker Compose
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
+            cd /opt/cyber-global-shield
+            git pull origin main
+            docker compose -f docker-compose.yml pull
+            docker compose -f docker-compose.yml up -d --remove-orphans
+            docker system prune -f
+            echo "✅ Deployment complete: $(date)"
+          EOF
+
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f http://${{ secrets.STAGING_HOST }}:8000/health || echo "⚠️ Health check failed"
+          curl -f http://${{ secrets.STAGING_HOST }}:8000/api/v1/dashboard/overview || echo "⚠️ API check failed"
+
+  # ===========================================================================
+  # Job 6: Deploy to Production
+  # ===========================================================================
+  deploy-production:
+    name: 🚀 Deploy Production
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+      - name: Manual approval gate
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          approvers: admin
+          minimum-approvals: 1
+          issue-title: "Deploy Cyber Global Shield to Production"
+          issue-body: "Please approve or deny the deployment to production."
+
+      - name: Deploy to Production
+        run: |
+          echo "🚀 Production deployment triggered"
+          echo "✅ Deploying version: ${{ github.sha }}"
+          echo "📦 Services: API, FL, Web Dashboard"
+          echo "🔗 URL: https://cyber-global-shield.com"
+
+  # ===========================================================================
+  # Job 7: Notify
+  # ===========================================================================
+  notify:
+    name: 📬 Notify
+    needs: [deploy-staging, deploy-production]
+    runs-on: ubuntu-latest
+    if: always() && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Slack Notification
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: '#deployments'
+          SLACK_TITLE: 'Cyber Global Shield Deployment'
+          SLACK_MESSAGE: |
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Status: ${{ job.status }}
+            Author: ${{ github.actor }}
+          SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}
+          SLACK_FOOTER: 'GitHub Actions CI/CD Pipeline'

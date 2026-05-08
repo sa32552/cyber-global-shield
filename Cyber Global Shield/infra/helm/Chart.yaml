@@ -1,0 +1,45 @@
+apiVersion: v2
+name: cyber-global-shield
+description: Cyber Global Shield — SOC Platform Helm Chart
+type: application
+version: 1.0.0
+appVersion: "2.0.0"
+icon: https://raw.githubusercontent.com/cyber-global-shield/brand/main/logo.png
+
+keywords:
+  - security
+  - soc
+  - siem
+  - soar
+  - ml
+  - cybersecurity
+
+home: https://github.com/cyber-global-shield
+sources:
+  - https://github.com/cyber-global-shield/cyber-global-shield
+
+maintainers:
+  - name: Cyber Global Shield Team
+    email: team@cyberglobalshield.io
+
+dependencies:
+  - name: clickhouse
+    version: "~4.0.0"
+    repository: "https://charts.altinity.com"
+    condition: clickhouse.enabled
+  - name: kafka
+    version: "~26.0.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: kafka.enabled
+  - name: redis
+    version: "~18.0.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+  - name: prometheus
+    version: "~25.0.0"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: prometheus.enabled
+  - name: grafana
+    version: "~7.0.0"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: grafana.enabled

@@ -1,0 +1,18 @@
+{
+  "threshold": 0.13098973299613348,
+  "reconstruction_error_threshold": 0.002320066581119844,
+  "metrics": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0,
+    "true_positives": 150,
+    "false_positives": 0,
+    "false_negatives": 0,
+    "true_negatives": 1350
+  },
+  "normal_error_mean": 0.001637299570117008,
+  "normal_error_std": 0.00015168595523905434,
+  "anomaly_error_mean": 0.008886410561390222,
+  "anomaly_error_std": 0.0036050801678315296,
+  "calibration_date": "2026-05-02T13:52:53.574185+00:00"
+}

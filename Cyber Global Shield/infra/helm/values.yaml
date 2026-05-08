@@ -1,0 +1,591 @@
+# =============================================================================
+# Cyber Global Shield — Helm Values
+# =============================================================================
+
+# Global settings
+global:
+  environment: production
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: "standard"
+
+# =============================================================================
+# Application Configuration
+# =============================================================================
+
+app:
+  name: cyber-global-shield
+  replicaCount: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  image:
+    repository: ghcr.io/cyber-global-shield/app
+    tag: latest
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8000"
+      prometheus.io/path: "/metrics"
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+      nginx.ingress.kubernetes.io/enable-cors: "true"
+      nginx.ingress.kubernetes.io/cors-allow-origin: "https://*.cyberglobalshield.io"
+      nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+      nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, X-API-Key"
+    hosts:
+      - host: api.cyberglobalshield.io
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - hosts:
+          - api.cyberglobalshield.io
+        secretName: cgs-tls
+
+  # Horizontal Pod Autoscaler
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    behavior:
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+      scaleUp:
+        stabilizationWindowSeconds: 0
+        policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 15
+          - type: Pods
+            value: 4
+            periodSeconds: 15
+        selectPolicy: Max
+
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
+
+  # Probes
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8000
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 2
+
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 30
+
+  # Environment variables
+  env:
+    - name: ENVIRONMENT
+      value: "production"
+    - name: LOG_LEVEL
+      value: "INFO"
+    - name: CORS_ORIGINS
+      value: "https://*.cyberglobalshield.io"
+    - name: ENABLE_HTTPS_REDIRECT
+      value: "true"
+    - name: RATE_LIMIT_ENABLED
+      value: "true"
+    - name: RATE_LIMIT_REQUESTS_PER_MINUTE
+      value: "60"
+
+  envFrom:
+    - secretRef:
+        name: cgs-secrets
+    - configMapRef:
+        name: cgs-config
+
+  # Volumes
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: cgs-data
+    - name: models
+      persistentVolumeClaim:
+        claimName: cgs-models
+
+  volumeMounts:
+    - name: data
+      mountPath: /app/data
+    - name: models
+      mountPath: /app/models
+
+  # Affinity & Topology
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - cyber-global-shield
+            topologyKey: kubernetes.io/hostname
+
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  tolerations: []
+
+# =============================================================================
+# ML Service (Federated Learning + Anomaly Detection)
+# =============================================================================
+
+ml:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ghcr.io/cyber-global-shield/ml
+    tag: latest
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 8001
+
+  resources:
+    requests:
+      cpu: "1000m"
+      memory: "2Gi"
+    limits:
+      cpu: "4000m"
+      memory: "8Gi"
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+
+  env:
+    - name: MLFLOW_TRACKING_URI
+      value: "http://mlflow:5000"
+    - name: MODEL_PATH
+      value: "/app/models/anomaly_detector.pt"
+    - name: BATCH_SIZE
+      value: "64"
+    - name: LEARNING_RATE
+      value: "0.001"
+
+  volumes:
+    - name: models
+      persistentVolumeClaim:
+        claimName: cgs-models
+
+  volumeMounts:
+    - name: models
+      mountPath: /app/models
+
+# =============================================================================
+# Web Frontend
+# =============================================================================
+
+web:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ghcr.io/cyber-global-shield/web
+    tag: latest
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: app.cyberglobalshield.io
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - hosts:
+          - app.cyberglobalshield.io
+        secretName: cgs-web-tls
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+# =============================================================================
+# SOAR Engine
+# =============================================================================
+
+soar:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ghcr.io/cyber-global-shield/soar
+    tag: latest
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 8002
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+# =============================================================================
+# Federated Learning Coordinator
+# =============================================================================
+
+fl:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/cyber-global-shield/fl
+    tag: latest
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 8003
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+
+# =============================================================================
+# Ray Cluster (Distributed ML)
+# =============================================================================
+
+ray:
+  enabled: true
+  head:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "4000m"
+        memory: "8Gi"
+  worker:
+    replicaCount: 3
+    resources:
+      requests:
+        cpu: "2000m"
+        memory: "4Gi"
+      limits:
+        cpu: "8000m"
+        memory: "16Gi"
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 20
+      targetCPUUtilizationPercentage: 80
+
+# =============================================================================
+# Infrastructure Dependencies
+# =============================================================================
+
+clickhouse:
+  enabled: true
+  auth:
+    username: cgs_user
+    database: cyber_shield
+  persistence:
+    size: 100Gi
+  resources:
+    requests:
+      cpu: "1000m"
+      memory: "4Gi"
+    limits:
+      cpu: "4000m"
+      memory: "16Gi"
+
+kafka:
+  enabled: true
+  persistence:
+    size: 50Gi
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "2Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# =============================================================================
+# Monitoring
+# =============================================================================
+
+prometheus:
+  enabled: true
+  alertmanager:
+    enabled: true
+  kubeStateMetrics:
+    enabled: true
+  nodeExporter:
+    enabled: true
+  pushgateway:
+    enabled: false
+  server:
+    retention: 15d
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "2Gi"
+      limits:
+        cpu: "2000m"
+        memory: "8Gi"
+
+grafana:
+  enabled: true
+  adminPassword: ""
+  persistence:
+    enabled: true
+    size: 10Gi
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus-server:9090
+          access: proxy
+          isDefault: true
+        - name: ClickHouse
+          type: grafana-clickhouse-datasource
+          url: http://clickhouse:8123
+          access: proxy
+          jsonData:
+            defaultDatabase: cyber_shield
+            port: 8123
+            server: clickhouse
+            username: cgs_user
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          orgId: 1
+          folder: ""
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+  dashboards:
+    default:
+      cgs-overview:
+        gnetId: 0
+        revision: 1
+        datasource: Prometheus
+      cgs-clickhouse:
+        gnetId: 0
+        revision: 1
+        datasource: ClickHouse
+
+# =============================================================================
+# Persistent Volumes
+# =============================================================================
+
+persistence:
+  data:
+    enabled: true
+    size: 50Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClass: standard
+  models:
+    enabled: true
+    size: 20Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClass: standard
+  backups:
+    enabled: true
+    size: 100Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClass: standard
+
+# =============================================================================
+# Backup CronJob
+# =============================================================================
+
+backup:
+  enabled: true
+  schedule: "0 */6 * * *"  # Every 6 hours
+  retentionDays: 30
+  s3:
+    bucket: ""
+    endpoint: ""
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
+
+# =============================================================================
+# Network Policies
+# =============================================================================
+
+networkPolicy:
+  enabled: true
+  ingressRules:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8000
+          protocol: TCP
+  egressRules:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: clickhouse
+      ports:
+        - port: 8123
+          protocol: TCP
+        - port: 9000
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka
+      ports:
+        - port: 9092
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - port: 6379
+          protocol: TCP
+
+# =============================================================================
+# Service Mesh (Istio)
+# =============================================================================
+
+istio:
+  enabled: false
+  virtualService:
+    gateways:
+      - cgs-gateway
+    hosts:
+      - api.cyberglobalshield.io
+    http:
+      - match:
+          - uri:
+              prefix: /api
+        route:
+          - destination:
+              host: cyber-global-shield
+              port:
+                number: 8000
+  destinationRule:
+    trafficPolicy:
+      tls:
+        mode: ISTIO_MUTUAL
+      connectionPool:
+        tcp:
+          maxConnections: 100
+        http:
+          http1MaxPendingRequests: 100
+          maxRequestsPerConnection: 10
+      outlierDetection:
+        consecutive5xxErrors: 5
+        interval: 30s
+        baseEjectionTime: 30s
+        maxEjectionPercent: 50

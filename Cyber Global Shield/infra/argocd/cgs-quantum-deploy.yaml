@@ -1,0 +1,500 @@
+# ⚛️ Cyber Global Shield — Quantum GitOps Deployment
+# ArgoCD App of Apps — Un seul manifeste pour tout déployer
+# Auto-sync, self-heal, rollback automatique, déploiement quantique
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cgs-quantum-platform
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/cyber-global-shield/platform.git'
+    path: Cyber Global Shield/infra/helm
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cgs-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 5m
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+      jsonPointers:
+        - /spec/metrics
+---
+# ──────────────────────────────────────────────────────────────────────────────
+# Infrastructure Layer (Wave -5 to -1)
+# ──────────────────────────────────────────────────────────────────────────────
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cgs-clickhouse
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://charts.bitnami.com/bitnami'
+    chart: clickhouse
+    targetRevision: 6.*
+    helm:
+      values: |
+        auth:
+          username: cgs_user
+          database: cyber_shield
+        persistence:
+          size: 100Gi
+        resources:
+          requests:
+            cpu: "2000m"
+            memory: "8Gi"
+          limits:
+            cpu: "8000m"
+            memory: "32Gi"
+        service:
+          type: ClusterIP
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cgs-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cgs-kafka
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://charts.bitnami.com/bitnami'
+    chart: kafka
+    targetRevision: 30.*
+    helm:
+      values: |
+        persistence:
+          size: 100Gi
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "4Gi"
+          limits:
+            cpu: "4000m"
+            memory: "8Gi"
+        service:
+          type: ClusterIP
+        heapOpts: "-Xmx4g -Xms4g"
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cgs-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cgs-redis
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://charts.bitnami.com/bitnami'
+    chart: redis
+    targetRevision: 20.*
+    helm:
+      values: |
+        architecture: replication
+        auth:
+          enabled: true
+        replica:
+          replicaCount: 3
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        master:
+          persistence:
+            size: 20Gi
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cgs-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+---
+# ──────────────────────────────────────────────────────────────────────────────
+# Core Services Layer (Wave 0)
+# ──────────────────────────────────────────────────────────────────────────────
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cgs-api
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/cyber-global-shield/platform.git'
+    path: Cyber Global Shield/infra/helm
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: app.name
+          value: cyber-global-shield
+        - name: app.replicaCount
+          value: '5'
+        - name: app.image.tag
+          value: 'latest'
+        - name: global.environment
+          value: production
+        - name: app.resources.requests.cpu
+          value: '1000m'
+        - name: app.resources.requests.memory
+          value: '1Gi'
+        - name: app.resources.limits.cpu
+          value: '4000m'
+        - name: app.resources.limits.memory
+          value: '4Gi'
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cgs-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 5m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cgs-ml
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/cyber-global-shield/platform.git'
+    path: Cyber Global Shield/infra/helm
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: ml.enabled
+          value: 'true'
+        - name: ml.replicaCount
+          value: '3'
+        - name: ml.image.tag
+          value: 'latest'
+        - name: ml.resources.requests.cpu
+          value: '2000m'
+        - name: ml.resources.requests.memory
+          value: '4Gi'
+        - name: ml.resources.limits.cpu
+          value: '8000m'
+        - name: ml.resources.limits.memory
+          value: '16Gi'
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cgs-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 5m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cgs-soar
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/cyber-global-shield/platform.git'
+    path: Cyber Global Shield/infra/helm
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: soar.enabled
+          value: 'true'
+        - name: soar.replicaCount
+          value: '3'
+        - name: soar.image.tag
+          value: 'latest'
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cgs-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 5m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cgs-fl
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/cyber-global-shield/platform.git'
+    path: Cyber Global Shield/infra/helm
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: fl.enabled
+          value: 'true'
+        - name: fl.replicaCount
+          value: '2'
+        - name: fl.image.tag
+          value: 'latest'
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cgs-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 5m
+---
+# ──────────────────────────────────────────────────────────────────────────────
+# ML Compute Layer (Wave 1)
+# ──────────────────────────────────────────────────────────────────────────────
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cgs-ray
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/cyber-global-shield/platform.git'
+    path: Cyber Global Shield/infra/helm
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: ray.enabled
+          value: 'true'
+        - name: ray.head.resources.requests.cpu
+          value: '2000m'
+        - name: ray.head.resources.requests.memory
+          value: '4Gi'
+        - name: ray.head.resources.limits.cpu
+          value: '8000m'
+        - name: ray.head.resources.limits.memory
+          value: '16Gi'
+        - name: ray.worker.replicaCount
+          value: '5'
+        - name: ray.worker.resources.requests.cpu
+          value: '4000m'
+        - name: ray.worker.resources.requests.memory
+          value: '8Gi'
+        - name: ray.worker.resources.limits.cpu
+          value: '16000m'
+        - name: ray.worker.resources.limits.memory
+          value: '32Gi'
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cgs-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 5m
+---
+# ──────────────────────────────────────────────────────────────────────────────
+# Monitoring Layer (Wave 2)
+# ──────────────────────────────────────────────────────────────────────────────
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cgs-monitoring
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/cyber-global-shield/platform.git'
+    path: Cyber Global Shield/infra/helm
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: prometheus.enabled
+          value: 'true'
+        - name: grafana.enabled
+          value: 'true'
+        - name: prometheus.server.retention
+          value: '30d'
+        - name: prometheus.server.resources.requests.cpu
+          value: '1000m'
+        - name: prometheus.server.resources.requests.memory
+          value: '4Gi'
+        - name: prometheus.server.resources.limits.cpu
+          value: '4000m'
+        - name: prometheus.server.resources.limits.memory
+          value: '16Gi'
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cgs-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 5m
+---
+# ──────────────────────────────────────────────────────────────────────────────
+# Networking Layer (Wave 3)
+# ──────────────────────────────────────────────────────────────────────────────
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cgs-ingress
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/cyber-global-shield/platform.git'
+    path: Cyber Global Shield/infra/helm
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: app.ingress.enabled
+          value: 'true'
+        - name: web.ingress.enabled
+          value: 'true'
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cgs-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 5m

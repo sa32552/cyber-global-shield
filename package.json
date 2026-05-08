@@ -1,0 +1,19 @@
+{
+  "name": "ai-incident-layer",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w @ai-incident-layer/api\" \"npm run dev -w @ai-incident-layer/web\" \"npm run dev -w @ai-incident-layer/ai\"",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.3"
+  }
+}

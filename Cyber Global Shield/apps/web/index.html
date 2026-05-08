@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Global Shield — SOC Dashboard</title>
+    <style>
+        :root {
+            --bg: #0a0e17;
+            --panel: #111827;
+            --border: #1f2937;
+            --text: #e5e7eb;
+            --muted: #9ca3af;
+            --accent: #3b82f6;
+            --critical: #ef4444;
+            --high: #f97316;
+            --medium: #eab308;
+            --low: #22c55e;
+            --info: #6b7280;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .layout { display: flex; height: 100vh; }
+        .sidebar {
+            width: 240px; background: var(--panel); border-right: 1px solid var(--border);
+            padding: 20px 0; display: flex; flex-direction: column;
+        }
+        .sidebar .logo { padding: 0 20px 20px; border-bottom: 1px solid var(--border); }
+        .sidebar .logo h1 { font-size: 16px; color: var(--accent); }
+        .sidebar .logo span { font-size: 11px; color: var(--muted); }
+        .sidebar nav { flex: 1; padding: 12px 0; }
+        .sidebar nav a {
+            display: flex; align-items: center; gap: 10px; padding: 10px 20px;
+            color: var(--muted); text-decoration: none; font-size: 14px; transition: .2s;
+        }
+        .sidebar nav a:hover, .sidebar nav a.active { color: var(--text); background: rgba(255,255,255,0.05); }
+        .sidebar nav a .badge {
+            background: var(--critical); color: #fff; font-size: 10px; padding: 2px 6px;
+            border-radius: 10px; margin-left: auto;
+        }
+        .main { flex: 1; overflow-y: auto; padding: 24px; }
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+        }
+        .header h2 { font-size: 20px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .status-dot.online { background: var(--low); box-shadow: 0 0 6px var(--low); }
+        .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 16px; margin-bottom: 24px; }
+        .metric-card {
+            background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+            padding: 20px; display: flex; flex-direction: column; gap: 8px;
+        }
+        .metric-card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; }
+        .metric-card .value { font-size: 28px; font-weight: 700; }
+        .metric-card .sub { font-size: 12px; color: var(--muted); }
+        .panels { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+        .panel {
+            background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+            padding: 20px;
+        }
+        .panel h3 { font-size: 14px; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 10px 8px; font-size: 13px; }
+        th { color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+        td { border-bottom: 1px solid var(--border); }
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px;
+            font-weight: 600; text-transform: uppercase;
+        }
+        .badge.critical { background: rgba(239,68,68,.2); color: var(--critical); }
+        .badge.high { background: rgba(249,115,22,.2); color: var(--high); }
+        .badge.medium { background: rgba(234,179,8,.2); color: var(--medium); }
+        .badge.low { background: rgba(34,197,94,.2); color: var(--low); }
+        .badge.info { background: rgba(107,114,128,.2); color: var(--info); }
+        .btn {
+            padding: 8px 16px; border-radius: 6px; border: none; font-size: 13px;
+            cursor: pointer; transition: .2s; font-weight: 600;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-danger { background: var(--critical); color: #fff; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        .refresh-indicator { font-size: 12px; color: var(--muted); }
+        .toast {
+            position: fixed; bottom: 20px; right: 20px; background: var(--panel);
+            border: 1px solid var(--border); border-radius: 8px; padding: 12px 20px;
+            font-size: 13px; z-index: 1000; animation: slideIn .3s;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .empty-state { text-align: center; padding: 40px; color: var(--muted); }
+        .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+        .loading { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        input, select {
+            background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+            padding: 8px 12px; color: var(--text); font-size: 13px;
+        }
+        .flex-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h1>🛡️ Cyber Global Shield</h1>
+                <span>v2.0 — Autonomous SIEM</span>
+            </div>
+            <nav>
+                <a href="#" class="active" onclick="showPage('dashboard')">📊 Dashboard</a>
+                <a href="#" onclick="showPage('alerts')">🚨 Alertes <span class="badge" id="alert-count-nav">0</span></a>
+                <a href="#" onclick="showPage('soar')">⚡ Console SOAR</a>
+                <a href="#" onclick="showPage('investigate')">🔍 Investigation</a>
+                <a href="#" onclick="showPage('threatmap')">🌍 Carte des Menaces</a>
+            </nav>
+            <div style="margin-top:auto; padding: 20px; border-top: 1px solid var(--border);">
+                <div style="font-size:12px; color:var(--muted);">
+                    <span class="status-dot online"></span> API Connectée
+                </div>
+                <div style="font-size:10px; color:var(--info); margin-top:4px;" id="api-status">localhost:8000</div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Header -->
+            <div class="header">
+                <div class="flex-row">
+                    <h2 id="page-title">📊 Dashboard</h2>
+                    <span class="refresh-indicator" id="last-refresh">—</span>
+                </div>
+                <div class="flex-row">
+                    <select id="org-selector" onchange="refreshAll()">
+                        <option value="default">Organisation: Default</option>
+                    </select>
+                    <button class="btn btn-outline" onclick="refreshAll()">🔄 Rafraîchir</button>
+                </div>
+            </div>
+
+            <!-- Page: Dashboard -->
+            <div id="page-dashboard">
+                <div class="metric-grid">
+                    <div class="metric-card">
+                        <span class="label">Logs Entrants (24h)</span>
+                        <span class="value" id="stat-logs">—</span>
+                        <span class="sub">événements</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="label">Alertes Critiques</span>
+                        <span class="value" style="color:var(--critical)" id="stat-critical">—</span>
+                        <span class="sub">dernières 24h</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="label">Anomalies Détectées</span>
+                        <span class="value" style="color:var(--high)" id="stat-anomalies">—</span>
+                        <span class="sub">par ML</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="label">Playbooks Exécutés</span>
+                        <span class="value" style="color:var(--accent)" id="stat-playbooks">—</span>
+                        <span class="sub">SOAR auto</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="label">Temps de Réponse</span>
+                        <span class="value" style="color:var(--low)" id="stat-response">—</span>
+                        <span class="sub">moyen (ms)</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="label">Sources Actives</span>
+                        <span class="value" id="stat-sources">—</span>
+                        <span class="sub">Zeek, Suricata...</span>
+                    </div>
+                </div>
+                <div class="panels">
+                    <div class="panel">
+                        <h3>Alertes Récentes</h3>
+                        <div id="recent-alerts"><div class="loading">Chargement...</div></div>
+                    </div>
+                    <div class="panel">
+                        <h3>Playbooks SOAR Récents</h3>
+                        <div id="recent-playbooks"><div class="loading">Chargement...</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Page: Alerts -->
+            <div id="page-alerts" style="display:none;">
+                <div class="flex-row" style="margin-bottom:16px;">
+                    <input type="text" placeholder="Rechercher..." id="alert-search" onkeyup="filterAlerts()">
+                    <select id="alert-severity-filter" onchange="filterAlerts()">
+                        <option value="">Toutes sévérités</option>
+                        <option value="critical">Critique</option>
+                        <option value="high">Haute</option>
+                        <option value="medium">Moyenne</option>
+                        <option value="low">Basse</option>
+                    </select>
+                    <select id="alert-type-filter" onchange="filterAlerts()">
+                        <option value="">Tous types</option>
+                        <option value="scan">Scan</option>
+                        <option value="brute_force">Brute Force</option>
+                        <option value="c2_communication">C2</option>
+                        <option value="data_exfiltration">Exfiltration</option>
+                        <option value="lateral_movement">Lateral Movement</option>
+                        <option value="ransomware_activity">Ransomware</option>
+                    </select>
+                </div>
+                <div class="panel">
+                    <div id="alerts-table"><div class="loading">Chargement des alertes...</div></div>
+                </div>
+            </div>
+
+            <!-- Page: SOAR Console -->
+            <div id="page-soar" style="display:none;">
+                <div class="metric-grid" style="margin-bottom:16px;" id="soar-playbook-grid">
+                    <div class="loading">Chargement des playbooks...</div>
+                </div>
+                <div class="panel">
+                    <h3>Exécution Manuelle</h3>
+                    <div class="flex-row" style="margin-top:12px;">
+                        <select id="soar-playbook-select">
+                            <option value="">— Sélectionner un playbook —</option>
+                        </select>
+                        <input type="text" placeholder="Alert ID (optionnel)" id="soar-alert-id">
+                        <button class="btn btn-primary" onclick="executePlaybook()">▶ Exécuter</button>
+                        <button class="btn btn-outline" onclick="executePlaybook(true)">🔍 Dry Run</button>
+                    </div>
+                    <div id="soar-result" style="margin-top:16px;"></div>
+                </div>
+            </div>
+
+            <!-- Page: Investigation -->
+            <div id="page-investigate" style="display:none;">
+                <div class="panel">
+                    <h3>Pipeline Autonome — Triage → Investigation → Réponse</h3>
+                    <div class="flex-row" style="margin-top:12px;">
+                        <input type="text" placeholder="Alert ID" id="inv-alert-id">
+                        <button class="btn btn-primary" onclick="runInvestigation()">🔍 Lancer le Pipeline</button>
+                    </div>
+                    <div id="investigation-result" style="margin-top:16px;"></div>
+                </div>
+            </div>
+
+            <!-- Page: Threat Map -->
+            <div id="page-threatmap" style="display:none;">
+                <div class="panel">
+                    <h3>Origine des Menaces</h3>
+                    <div id="threat-map-container" style="height:400px; display:flex; align-items:center; justify-content:center;">
+                        <div class="empty-state">
+                            <div class="icon">🌍</div>
+                            <p>Carte des menaces — intégration OpenStreetMap à venir</p>
+                            <p style="font-size:12px;">Les IPs d'attaque seront géolocalisées et affichées ici</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel" style="margin-top:16px;">
+                    <h3>Top IPs Malveillantes</h3>
+                    <div id="top-ips"><div class="loading">Chargement...</div></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let TOKEN = '';
+        const ORG_ID = 'default';
+
+        // ============ API Client ============
+        async function api(path, method='GET', body=null) {
+            const opts = { method, headers: { 'Content-Type': 'application/json' } };
+            if (TOKEN) opts.headers['Authorization'] = `Bearer ${TOKEN}`;
+            if (body) opts.body = JSON.stringify(body);
+            try {
+                const resp = await fetch(`${API_BASE}${path}`, opts);
+                return await resp.json();
+            } catch(e) {
+                console.error('API Error:', e);
+                return null;
+            }
+        }
+
+        // ============ Auth ============
+        async function login() {
+            const form = new FormData();
+            form.append('username', 'admin');
+            form.append('password', 'cybershield2024');
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/auth/login`, {
+                    method: 'POST', body: form
+                });
+                const data = await resp.json();
+                TOKEN = data.access_token;
+                document.getElementById('api-status').textContent = '🔐 Authentifié';
+                return true;
+            } catch(e) {
+                document.getElementById('api-status').textContent = '⚠️ Auth échouée';
+                return false;
+            }
+        }
+
+        // ============ Navigation ============
+        function showPage(page) {
+            ['dashboard','alerts','soar','investigate','threatmap'].forEach(p => {
+                document.getElementById(`page-${p}`).style.display = p === page ? 'block' : 'none';
+            });
+            document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+            document.querySelectorAll('nav a').forEach(a => {
+                if (a.textContent.toLowerCase().includes(page) || (page==='investigate' && a.textContent.includes('Investigation'))) {
+                    a.classList.add('active');
+                }
+            });
+            const titles = {dashboard:'📊 Dashboard', alerts:'🚨 Alertes', soar:'⚡ Console SOAR', investigate:'🔍 Investigation', threatmap:'🌍 Carte des Menaces'};
+            document.getElementById('page-title').textContent = titles[page] || 'Dashboard';
+            if (page === 'dashboard') refreshDashboard();
+            if (page === 'alerts') refreshAlerts();
+            if (page === 'soar') refreshSoar();
+            if (page === 'threatmap') refreshThreatMap();
+        }
+
+        // ============ Toast ============
+        function toast(msg) {
+            const c = document.getElementById('toast-container');
+            const el = document.createElement('div');
+            el.className = 'toast'; el.textContent = msg;
+            c.appendChild(el);
+            setTimeout(() => el.remove(), 3000);
+        }
+
+        // ============ Dashboard ============
+        async function refreshDashboard() {
+            const data = await api(`/api/v1/dashboard/overview?org_id=${ORG_ID}`);
+            document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+
+            if (!data) {
+                document.getElementById('stat-logs').textContent = '—';
+                return;
+            }
+
+            document.getElementById('stat-logs').textContent = (data.traffic_stats?.volume?.reduce((s,v)=>s+(v.event_count||0),0) || '—').toLocaleString();
+            document.getElementById('stat-critical').textContent = (data.critical_alerts_24h || 0).toLocaleString();
+
+            // Recent alerts
+            const alerts = data.latest_alerts || [];
+            let html = '<table><thead><tr><th>Heure</th><th>Type</th><th>Sévérité</th><th>Source</th><th>Destination</th></tr></thead><tbody>';
+            if (alerts.length === 0) html += '<tr><td colspan="5" class="empty-state">Aucune alerte récente</td></tr>';
+            alerts.forEach(a => {
+                const ts = a.timestamp ? new Date(a.timestamp).toLocaleTimeString() : '—';
+                const sev = (a.severity || 'info').toLowerCase();
+                html += `<tr>
+                    <td>${ts}</td>
+                    <td>${a.event_type || '—'}</td>
+                    <td><span class="badge ${sev}">${a.severity || 'info'}</span></td>
+                    <td>${a.src_ip || '—'}</td>
+                    <td>${a.dst_ip || '—'}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            document.getElementById('recent-alerts').innerHTML = html;
+            document.getElementById('alert-count-nav').textContent = data.critical_alerts_24h || 0;
+
+            // Anomalies
+            document.getElementById('stat-anomalies').textContent = (data.traffic_stats?.anomalies?.[0]?.anomaly_count || 0).toLocaleString();
+            document.getElementById('stat-playbooks').textContent = '—';
+            document.getElementById('stat-response').textContent = '—';
+            document.getElementById('stat-sources').textContent = '2 (Zeek, Suricata)';
+
+            document.getElementById('recent-playbooks').innerHTML =
+                '<div class="empty-state"><div class="icon">⚡</div><p>Prêt — les playbooks s\'exécutent automatiquement</p><p style="font-size:12px;">Ransomware, Lateral Movement, C2, Brute Force, Exfiltration</p></div>';
+        }
+
+        // ============ Alerts ============
+        async function refreshAlerts() {
+            const data = await api(`/api/v1/dashboard/alerts?org_id=${ORG_ID}&hours=24&limit=50`);
+            window._allAlerts = data?.alerts || [];
+            renderAlertsTable(window._allAlerts);
+        }
+
+        function renderAlertsTable(alerts) {
+            if (!alerts || alerts.length === 0) {
+                document.getElementById('alerts-table').innerHTML = '<div class="empty-state"><div class="icon">✅</div><p>Aucune alerte trouvée</p></div>';
+                return;
+            }
+            let html = '<table><thead><tr><th>Heure</th><th>Type</th><th>Sévérité</th><th>IP Source</th><th>IP Dest</th><th>Proto</th><th>Tags</th><th>Actions</th></tr></thead><tbody>';
+            alerts.forEach(a => {
+                const ts = a.timestamp ? new Date(a.timestamp).toLocaleTimeString() : '—';
+                const sev = (a.severity || 'info').toLowerCase();
+                html += `<tr>
+                    <td>${ts}</td>
+                    <td>${a.event_type || '—'}</td>
+                    <td><span class="badge ${sev}">${a.severity || 'info'}</span></td>
+                    <td>${a.src_ip || '—'}</td>
+                    <td>${a.dst_ip || '—'}</td>
+                    <td>${a.protocol || '—'}</td>
+                    <td>${(a.tags||[]).join(', ') || '—'}</td>
+                    <td><button class="btn btn-outline" style="padding:4px 8px;font-size:11px;" 
+                        onclick="blockAlert('${a.src_ip}')">🛡️ Bloquer</button></td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            document.getElementById('alerts-table').innerHTML = html;
+        }
+
+        function filterAlerts() {
+            const search = (document.getElementById('alert-search').value || '').toLowerCase();
+            const sevFilter = document.getElementById('alert-severity-filter').value;
+            const typeFilter = document.getElementById('alert-type-filter').value;
+            let filtered = window._allAlerts || [];
+            if (search) filtered = filtered.filter(a => JSON.stringify(a).toLowerCase().includes(search));
+            if (sevFilter) filtered = filtered.filter(a => a.severity === sevFilter);
+            if (typeFilter) filtered = filtered.filter(a => a.event_type === typeFilter);
+            renderAlertsTable(filtered);
+        }
+
+        async function blockAlert(ip) {
+            if (!ip) return;
+            const confirmed = confirm(`Bloquer l'IP ${ip} sur le firewall ?`);
+            if (!confirmed) return;
+            const result = await api('/api/v1/soar/execute', 'POST', {
+                playbook_name: 'brute_force_response',
+                alert: { src_ip: ip },
+                dry_run: false,
+                human_approved: true
+            });
+            toast(result?.status === 'completed' ? `✅ IP ${ip} bloquée` : `⚠️ Échec: ${result?.status}`);
+        }
+
+        // ============ SOAR ============
+        async function refreshSoar() {
+            const data = await api('/api/v1/soar/playbooks');
+            const playbooks = data || [];
+            let html = '';
+            const icons = { ransomware_response: '💣', lateral_movement_response: '↔️', data_exfiltration_response: '📤', c2_communication_response: '🕸️', brute_force_response: '🔐' };
+            playbooks.forEach(pb => {
+                html += `<div class="metric-card">
+                    <span class="label">${icons[pb.name] || '⚡'} ${pb.description}</span>
+                    <span class="value" style="font-size:16px;">${pb.name.replace('_response','').replace(/_/g,' ')}</span>
+                    <span class="sub">${pb.actions_count} actions | ${pb.requires_approval ? '⚠️ Approbation requise' : '✅ Auto'} | ${pb.on_cooldown ? '⏳ Cooldown' : '🟢 Prêt'}</span>
+                </div>`;
+            });
+            document.getElementById('soar-playbook-grid').innerHTML = html;
+
+            const sel = document.getElementById('soar-playbook-select');
+            sel.innerHTML = '<option value="">— Sélectionner —</option>';
+            playbooks.forEach(pb => {
+                sel.innerHTML += `<option value="${pb.name}">${pb.name.replace('_response','').replace(/_/g,' ')}</option>`;
+            });
+        }
+
+        async function executePlaybook(dryRun = false) {
+            const name = document.getElementById('soar-playbook-select').value;
+            if (!name) { toast('Sélectionnez un playbook'); return; }
+            const alertId = document.getElementById('soar-alert-id').value || 'manual-execution';
+            const result = await api('/api/v1/soar/execute', 'POST', {
+                playbook_name: name,
+                alert: { id: alertId, src_ip: '10.0.0.50', user: 'jdoe' },
+                iocs: { ips: ['45.33.32.156'], domains: ['evil.com'] },
+                dry_run: dryRun,
+                human_approved: true
+            });
+            const container = document.getElementById('soar-result');
+            if (!result) { container.innerHTML = '<p style="color:var(--critical)">Erreur API</p>'; return; }
+            const statusColor = result.status === 'completed' ? 'var(--low)' : result.status === 'failed' ? 'var(--critical)' : 'var(--medium)';
+            let html = `<div style="padding:16px; background:rgba(0,0,0,0.2); border-radius:8px;">
+                <p><strong style="color:${statusColor}">Statut: ${result.status}</strong> | Durée: ${result.duration_ms?.toFixed(0) || '—'} ms</p>
+                <table style="margin-top:8px;"><thead><tr><th>Action</th><th>Statut</th><th>Durée</th></tr></thead><tbody>`;
+            (result.actions || []).forEach(a => {
+                html += `<tr><td>${a.name}</td><td>${a.status}</td><td>${a.duration_ms?.toFixed(0) || '—'} ms</td></tr>`;
+            });
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+            toast(dryRun ? 'Dry run terminé' : `Playbook ${name} exécuté — ${result.status}`);
+        }
+
+        // ============ Investigation ============
+        async function runInvestigation() {
+            const alertId = document.getElementById('inv-alert-id').value || 'demo-alert-001';
+            const container = document.getElementById('investigation-result');
+            container.innerHTML = '<div class="loading">Pipeline en cours — Triage → Investigation → Réponse...</div>';
+
+            const result = await api('/api/v1/agents/pipeline', 'POST', {
+                alert: {
+                    id: alertId,
+                    alert_type: 'scan',
+                    title: 'Suspicious port scan detected',
+                    source: 'zeek',
+                    src_ip: '45.33.32.156',
+                    dst_ip: '10.0.1.50',
+                    severity: 'high',
+                    iocs: { ips: ['45.33.32.156'] }
+                },
+                logs: [
+                    { event_type: 'scan', src_ip: '45.33.32.156', dst_ip: '10.0.1.50', dst_port: 445, protocol: 'tcp', severity: 'high' },
+                    { event_type: 'scan', src_ip: '45.33.32.156', dst_ip: '10.0.1.51', dst_port: 22, protocol: 'tcp', severity: 'high' },
+                ]
+            });
+
+            if (!result) {
+                container.innerHTML = '<p style="color:var(--critical)">Erreur: API non disponible ou agents LLM non configurés. Vérifiez OPENAI_API_KEY.</p>';
+                return;
+            }
+
+            let html = '<div style="padding:16px; background:rgba(0,0,0,0.2); border-radius:8px;">';
+            html += `<p><strong>Pipeline complété</strong> — ${result.duration_seconds?.toFixed(2) || '—'}s</p>`;
+            if (result.triage) {
+                html += `<div style="margin-top:12px;"><strong>Triage:</strong> Sévérité=${result.triage.severity}, Priorité=${result.triage.priority}/10, Confiance=${(result.triage.confidence*100).toFixed(0)}%</div>`;
+                html += `<div style="margin-top:4px;font-size:12px;color:var(--muted);">${result.triage.reasoning || ''}</div>`;
+            }
+            if (result.investigation) {
+                html += `<div style="margin-top:12px;"><strong>Investigation:</strong> ${result.investigation.root_cause || '—'}</div>`;
+            }
+            if (result.decision) {
+                html += `<div style="margin-top:12px;"><strong>Décision:</strong> <span class="badge high">${result.decision.decision_type}</span> Confiance=${(result.decision.confidence*100).toFixed(0)}%</div>`;
+            }
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // ============ Threat Map ============
+        async function refreshThreatMap() {
+            const data = await api(`/api/v1/dashboard/alerts?org_id=${ORG_ID}&hours=24&severity=high&limit=20`);
+            const alerts = data?.alerts || [];
+            let html = '<table><thead><tr><th>IP Source</th><th>Type</th><th>Sévérité</th><th>Pays (estimé)</th></tr></thead><tbody>';
+            if (alerts.length === 0) html += '<tr><td colspan="4" class="empty-state">Aucune IP malveillante détectée</td></tr>';
+            const seen = new Set();
+            alerts.forEach(a => {
+                if (!a.src_ip || seen.has(a.src_ip)) return;
+                seen.add(a.src_ip);
+                const country = a.src_ip?.startsWith('10.') ? 'Interne' : a.src_ip?.startsWith('45.') ? 'US' : a.src_ip?.startsWith('91.') ? 'IN' : a.src_ip?.startsWith('185.') ? 'RU' : a.src_ip?.startsWith('5.') ? 'DE' : 'Inconnu';
+                html += `<tr>
+                    <td>${a.src_ip}</td>
+                    <td>${a.event_type || '—'}</td>
+                    <td><span class="badge ${(a.severity||'info').toLowerCase()}">${a.severity || 'info'}</span></td>
+                    <td>${country}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            document.getElementById('top-ips').innerHTML = html;
+        }
+
+        // ============ Init ============
+        async function refreshAll() {
+            await refreshDashboard();
+            document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+        }
+
+        async function init() {
+            const ok = await login();
+            if (ok) {
+                await refreshAll();
+                setInterval(refreshAll, 30000);
+            } else {
+                document.getElementById('api-status').textContent = '⚠️ API inaccessible';
+                // Demo mode — show mock data
+                document.getElementById('stat-logs').textContent = '12,847';
+                document.getElementById('stat-critical').textContent = '3';
+                document.getElementById('stat-anomalies').textContent = '47';
+                document.getElementById('stat-playbooks').textContent = '2';
+                document.getElementById('stat-response').textContent = '245';
+                document.getElementById('stat-sources').textContent = '2 (Zeek, Suricata)';
+                document.getElementById('recent-alerts').innerHTML =
+                    '<table><tbody><tr><td>10:45</td><td>scan</td><td><span class="badge high">high</span></td><td>45.33.32.156</td><td>10.0.1.50</td></tr>' +
+                    '<tr><td>10:42</td><td>brute_force</td><td><span class="badge critical">critical</span></td><td>91.240.118.30</td><td>10.0.2.10</td></tr>' +
+                    '<tr><td>10:38</td><td>c2_communication</td><td><span class="badge critical">critical</span></td><td>185.220.101.34</td><td>10.0.1.25</td></tr></tbody></table>';
+                document.getElementById('recent-playbooks').innerHTML =
+                    '<div style="font-size:13px;"><p>✅ <strong>ransomware_response</strong> — complété (10:40)</p><p>✅ <strong>brute_force_response</strong> — complété (10:35)</p></div>';
+                document.getElementById('alert-count-nav').textContent = '3';
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

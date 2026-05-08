@@ -1,0 +1,60 @@
+{{- if .Values.app.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "cgs.fullname" . }}
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.app.ingress.annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.app.ingress.className }}
+  tls:
+    {{- toYaml .Values.app.ingress.tls | nindent 4 }}
+  rules:
+    {{- range .Values.app.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "cgs.fullname" $ }}
+                port:
+                  number: {{ $.Values.app.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}
+{{- if .Values.web.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "cgs.fullname" . }}-web
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  annotations:
+    {{- toYaml .Values.web.ingress.annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.web.ingress.className }}
+  tls:
+    {{- toYaml .Values.web.ingress.tls | nindent 4 }}
+  rules:
+    {{- range .Values.web.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "cgs.fullname" $ }}-web
+                port:
+                  number: {{ $.Values.web.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}

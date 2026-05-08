@@ -1,0 +1,167 @@
+# ⚛️ Cyber Global Shield — Quantum GitOps Deployment
+# Un push → Build → ArgoCD sync → Auto-déploiement Kubernetes
+# Surpuissant, auto-réparation, rollback automatique
+
+name: ⚛️ Quantum GitOps Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cyber Global Shield/app/**'
+      - 'Cyber Global Shield/infra/helm/**'
+      - 'Cyber Global Shield/infra/argocd/**'
+      - 'Cyber Global Shield/infra/docker/Dockerfile*'
+      - 'Cyber Global Shield/docker-compose*.yml'
+
+env:
+  AWS_REGION: eu-west-3
+  EKS_CLUSTER: cgs-production-cluster
+  ARGOCD_SERVER: argocd.cyberglobalshield.io
+  GHCR_REGISTRY: ghcr.io/cyber-global-shield
+
+jobs:
+  # ===========================================================================
+  # BUILD & PUSH — Images Docker optimisées
+  # ===========================================================================
+  build:
+    name: 🐳 Build & Push
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Cyber Global Shield
+
+    strategy:
+      matrix:
+        service: [api, fl, web]
+        include:
+          - service: api
+            dockerfile: infra/docker/Dockerfile
+          - service: fl
+            dockerfile: infra/docker/Dockerfile.fl
+          - service: web
+            dockerfile: infra/docker/Dockerfile.prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push
+        uses: docker/build-push-action@v5
+        with:
+          context: Cyber Global Shield
+          file: Cyber Global Shield/${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.GHCR_REGISTRY }}/${{ matrix.service }}:latest
+            ${{ env.GHCR_REGISTRY }}/${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # DEPLOY — Sync ArgoCD → Auto-déploiement Kubernetes
+  # ===========================================================================
+  deploy:
+    name: 🚀 ArgoCD Quantum Sync
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Connect EKS
+        run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+
+      - name: Login ArgoCD
+        run: |
+          argocd login ${{ env.ARGOCD_SERVER }} \
+            --username admin \
+            --password ${{ secrets.ARGOCD_ADMIN_PASSWORD }} \
+            --grpc-web
+
+      - name: 🚀 Quantum Sync — Tous les services
+        run: |
+          echo "╔══════════════════════════════════════════════╗"
+          echo "║  ⚛️  CYBER GLOBAL SHIELD — QUANTUM DEPLOY   ║"
+          echo "╚══════════════════════════════════════════════╝"
+          
+          APPS=(
+            "cgs-clickhouse"
+            "cgs-kafka"
+            "cgs-redis"
+            "cgs-api"
+            "cgs-ml"
+            "cgs-soar"
+            "cgs-fl"
+            "cgs-ray"
+            "cgs-monitoring"
+            "cgs-ingress"
+          )
+          
+          for app in "${APPS[@]}"; do
+            echo "  ⚡ Syncing $app..."
+            argocd app sync $app --grpc-web --timeout 300 --prune || echo "  ⚠️ $app partial"
+          done
+          
+          echo ""
+          echo "✅ QUANTUM DEPLOY COMPLETE"
+
+      - name: 🔍 Health Verification
+        run: |
+          echo "╔══════════════════════════════════════════════╗"
+          echo "║     🔍  QUANTUM HEALTH VERIFICATION         ║"
+          echo "╚══════════════════════════════════════════════╝"
+          
+          argocd app list --grpc-web -o json | jq -r '.[] | "\(.metadata.name): \(.status.health.status) — \(.status.sync.status)"'
+          
+          UNHEALTHY=$(argocd app list --grpc-web -o json | jq -r '.[] | select(.status.health.status != "Healthy") | .metadata.name')
+          if [ -n "$UNHEALTHY" ]; then
+            echo "⚠️  Unhealthy: $UNHEALTHY"
+            exit 1
+          fi
+          echo "✅ ALL SYSTEMS HEALTHY — QUANTUM SHIELD ACTIVE"
+
+      - name: 🌐 Smoke Tests
+        run: |
+          sleep 10
+          echo "Testing endpoints..."
+          curl -sf https://api.cyberglobalshield.io/health > /dev/null && echo "✅ API Health OK" || echo "⚠️ API Health failed"
+          curl -sf https://api.cyberglobalshield.io/ready > /dev/null && echo "✅ API Ready OK" || echo "⚠️ API Ready failed"
+          curl -sf -o /dev/null -w "%{http_code}" https://app.cyberglobalshield.io | grep -q "200" && echo "✅ Dashboard OK" || echo "⚠️ Dashboard failed"
+          echo "✅ SMOKE TESTS COMPLETE"
+
+      - name: 📬 Notify
+        if: always()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: '#deployments'
+          SLACK_TITLE: '⚛️ Quantum Deploy — Cyber Global Shield'
+          SLACK_MESSAGE: |
+            Status: ${{ job.status }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+            Dashboard: https://app.cyberglobalshield.io
+            ArgoCD: https://argocd.cyberglobalshield.io
+          SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}

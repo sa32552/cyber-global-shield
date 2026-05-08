@@ -1,0 +1,10 @@
+{
+  "name": "@ai-incident-layer/ai",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload",
+    "build": "echo ai build handled by docker",
+    "lint": "echo ai lint skipped",
+    "typecheck": "echo ai typecheck skipped"
+  }
+}

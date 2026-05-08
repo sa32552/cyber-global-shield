@@ -1,0 +1,81 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "🚀 Cyber Global Shield - Lancer la plateforme",
+            "type": "shell",
+            "command": "cd \"${workspaceFolder}\\Cyber Global Shield\" && python app.py",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "🧪 Tester tous les modules ULTIMATE",
+            "type": "shell",
+            "command": "cd \"${workspaceFolder}\\Cyber Global Shield\\app\\core\" && for %f in (auto_incident_responder.py global_threat_intel.py identity_threat_detector.py advanced_analytics.py auto_threat_hunter_v3.py ztna.py cloud_security_analyzer.py security_orchestrator.py) do (echo ===== %f ===== & python %f & echo.)",
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "📊 Dashboard Web - Live Server",
+            "type": "shell",
+            "command": "npx live-server \"${workspaceFolder}\\Cyber Global Shield\\apps\\web\" --port=5500 --open=index.html",
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "🔬 Lancer les tests unitaires",
+            "type": "shell",
+            "command": "cd \"${workspaceFolder}\\Cyber Global Shield\" && python -m pytest tests/ -v",
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "🐳 Docker Compose - Déploiement complet",
+            "type": "shell",
+            "command": "cd \"${workspaceFolder}\\Cyber Global Shield\" && docker-compose up -d",
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "📈 Dashboard Transcendent (Quantum)",
+            "type": "shell",
+            "command": "npx live-server \"${workspaceFolder}\\Cyber Global Shield\\apps\\web\" --port=5501 --open=transcendent_dashboard.html",
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated"
+            }
+        }
+    ]
+}

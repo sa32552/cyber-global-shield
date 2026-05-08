@@ -1,0 +1,118 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "🚀 Cyber Global Shield - Lancer la plateforme",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\Cyber Global Shield\\app.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}\\Cyber Global Shield",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}\\Cyber Global Shield"
+            }
+        },
+        {
+            "name": "🧪 Security Orchestrator - Test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\Cyber Global Shield\\app\\core\\security_orchestrator.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}\\Cyber Global Shield"
+        },
+        {
+            "name": "🧪 Auto Incident Responder - Test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\Cyber Global Shield\\app\\core\\auto_incident_responder.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}\\Cyber Global Shield"
+        },
+        {
+            "name": "🧪 Global Threat Intel - Test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\Cyber Global Shield\\app\\core\\global_threat_intel.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}\\Cyber Global Shield"
+        },
+        {
+            "name": "🧪 Identity Threat Detector - Test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\Cyber Global Shield\\app\\core\\identity_threat_detector.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}\\Cyber Global Shield"
+        },
+        {
+            "name": "🧪 Advanced Analytics - Test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\Cyber Global Shield\\app\\core\\advanced_analytics.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}\\Cyber Global Shield"
+        },
+        {
+            "name": "🧪 Auto Threat Hunter v3 - Test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\Cyber Global Shield\\app\\core\\auto_threat_hunter_v3.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}\\Cyber Global Shield"
+        },
+        {
+            "name": "🧪 ZTNA - Test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\Cyber Global Shield\\app\\core\\ztna.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}\\Cyber Global Shield"
+        },
+        {
+            "name": "🧪 Cloud Security Analyzer - Test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\Cyber Global Shield\\app\\core\\cloud_security_analyzer.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}\\Cyber Global Shield"
+        },
+        {
+            "name": "📊 Dashboard Web (Live Server)",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npx",
+            "runtimeArgs": [
+                "live-server",
+                "${workspaceFolder}\\Cyber Global Shield\\apps\\web",
+                "--port=5500",
+                "--open=index.html"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "📈 Dashboard Transcendent (Live Server)",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npx",
+            "runtimeArgs": [
+                "live-server",
+                "${workspaceFolder}\\Cyber Global Shield\\apps\\web",
+                "--port=5501",
+                "--open=transcendent_dashboard.html"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "🔬 Tests unitaires",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "${workspaceFolder}\\Cyber Global Shield\\tests\\",
+                "-v"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}\\Cyber Global Shield"
+        }
+    ]
+}

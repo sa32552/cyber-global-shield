@@ -1,0 +1,285 @@
+version: "3.8"
+
+services:
+  # ---- Core Platform ----
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+    container_name: cyber-shield-api
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - CLICKHOUSE_HOST=clickhouse
+      - REDIS_URL=redis://redis:6379/0
+      - FLOWER_SERVER_ADDRESS=fl-server:8080
+      - RAY_ADDRESS=ray-head:6379
+    depends_on:
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  # ---- Ingestion Pipeline ----
+  vector:
+    image: timberio/vector:0.38.0-alpine
+    container_name: cyber-shield-vector
+    command: --config /etc/vector/vector.yaml
+    volumes:
+      - ./vector.yaml:/etc/vector/vector.yaml:ro
+    ports:
+      - "9000:9000"
+    depends_on:
+      - kafka
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  # ---- Streaming ----
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: cyber-shield-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: cyber-shield-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_COMPRESSION_TYPE: lz4
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  # ---- Analytics Database ----
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: cyber-shield-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: cyber_shield
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  # ---- Cache ----
+  redis:
+    image: redis:7.2-alpine
+    container_name: cyber-shield-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  # ---- ML / Ray ----
+  ray-head:
+    image: rayproject/ray:2.10.0-py310
+    container_name: cyber-shield-ray-head
+    command: ray start --head --port=6379 --dashboard-host=0.0.0.0 --num-cpus=4
+    ports:
+      - "6379:6379"
+      - "8265:8265"
+    volumes:
+      - ray_data:/tmp/ray
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  ray-worker:
+    image: rayproject/ray:2.10.0-py310
+    container_name: cyber-shield-ray-worker
+    command: ray start --address=ray-head:6379 --num-cpus=4
+    depends_on:
+      - ray-head
+    volumes:
+      - ray_data:/tmp/ray
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  # ---- Federated Learning ----
+  fl-server:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.fl
+    container_name: cyber-shield-fl-server
+    command: python -m app.fl.federated_server
+    ports:
+      - "8080:8080"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  # ---- Observability ----
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: cyber-shield-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: cybershield
+      GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-worldmap-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./infra/docker/grafana/datasources:/etc/grafana/provisioning/datasources
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: cyber-shield-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  # ---- Security Tools ----
+  zeek:
+    image: zeek/zeek:6.0
+    container_name: cyber-shield-zeek
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_PTRACE
+    volumes:
+      - zeek_logs:/usr/local/zeek/logs
+      - ./infra/docker/zeek/local.zeek:/usr/local/zeek/share/zeek/site/local.zeek:ro
+    restart: unless-stopped
+
+  suricata:
+    image: jasonish/suricata:7.0
+    container_name: cyber-shield-suricata
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_NICE
+    volumes:
+      - suricata_logs:/var/log/suricata
+      - ./infra/docker/suricata/suricata.yaml:/etc/suricata/suricata.yaml:ro
+    restart: unless-stopped
+
+  # ---- Log Watcher (Python fallback) ----
+  log-watcher:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+    container_name: cyber-shield-log-watcher
+    command: python -m app.ingestion.log_watcher
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - CLICKHOUSE_HOST=clickhouse
+      - ZEEK_LOG_DIR=/usr/local/zeek/logs/current
+      - SURICATA_EVE_PATH=/var/log/suricata/eve.json
+    volumes:
+      - zeek_logs:/usr/local/zeek/logs:ro
+      - suricata_logs:/var/log/suricata:ro
+      - ./app:/app/app
+    depends_on:
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+  # ---- MISP Threat Intel ----
+  misp:
+    image: coolacid/misp-docker:core-latest
+    container_name: cyber-shield-misp
+    ports:
+      - "8443:443"
+    environment:
+      MISP_BASEURL: https://localhost:8443
+      MISP_ADMIN_EMAIL: admin@cybershield.io
+      MISP_ADMIN_PASSPHRASE: CyberShield2024!
+    volumes:
+      - misp_data:/var/www/MISP
+    restart: unless-stopped
+    networks:
+      - cyber-shield
+
+networks:
+  cyber-shield:
+    driver: bridge
+
+volumes:
+  clickhouse_data:
+  redis_data:
+  ray_data:
+  grafana_data:
+  prometheus_data:
+  zeek_logs:
+  suricata_logs:
+  misp_data:

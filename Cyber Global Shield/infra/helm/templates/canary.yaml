@@ -1,0 +1,75 @@
+{{- if .Values.canary.enabled }}
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: {{ include "cgs.fullname" . }}
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+spec:
+  provider: istio
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "cgs.fullname" . }}
+  service:
+    port: {{ .Values.app.service.port }}
+    targetPort: {{ .Values.app.service.targetPort }}
+    gateways:
+      - istio-system/public-gateway
+    hosts:
+      - {{ .Values.canary.host }}
+    trafficPolicy:
+      tls:
+        mode: ISTIO_MUTUAL
+  analysis:
+    interval: 1m
+    threshold: 5
+    maxWeight: 50
+    stepWeight: 10
+    metrics:
+      - name: request-success-rate
+        thresholdRange:
+          min: 99
+        interval: 1m
+      - name: request-duration
+        thresholdRange:
+          max: 500
+        interval: 1m
+    webhooks:
+      - name: load-test
+        url: http://flagger-loadtester.test/
+        timeout: 5s
+        metadata:
+          cmd: "locust -f /tests/load/locustfile.py --host=http://{{ include "cgs.fullname" . }}-canary:{{ .Values.app.service.port }}"
+---
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: {{ include "cgs.fullname" . }}-ml
+  labels:
+    {{- include "cgs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ml
+spec:
+  provider: istio
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "cgs.fullname" . }}-ml
+  service:
+    port: {{ .Values.ml.service.port }}
+    targetPort: {{ .Values.ml.service.port }}
+  analysis:
+    interval: 5m
+    threshold: 3
+    maxWeight: 30
+    stepWeight: 10
+    metrics:
+      - name: request-success-rate
+        thresholdRange:
+          min: 95
+        interval: 5m
+      - name: request-duration
+        thresholdRange:
+          max: 1000
+        interval: 5m
+{{- end }}
