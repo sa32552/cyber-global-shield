@@ -1,0 +1,60 @@
+services:
+  # ─── API FastAPI principale ──────────────────────────────────────────────
+  - type: web
+    name: cyber-global-shield-api
+    runtime: python
+    region: frankfurt
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        value: cybershield2024
+      - key: ADMIN_ORG_ID
+        value: global
+      - key: ADMIN_ROLE
+        value: admin
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: cyber-global-shield-redis
+          property: connectionString
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        value: ""
+      - key: CLICKHOUSE_HOST
+        value: ""
+      - key: CLICKHOUSE_PORT
+        value: "8123"
+      - key: CLICKHOUSE_USER
+        value: default
+      - key: CLICKHOUSE_PASSWORD
+        value: ""
+      - key: CLICKHOUSE_DATABASE
+        value: cyber_shield
+      - key: RATE_LIMIT_PER_SECOND
+        value: "10000"
+      - key: RATE_LIMIT_BURST
+        value: "50000"
+
+  # ─── Redis ──────────────────────────────────────────────────────────────
+  - type: redis
+    name: cyber-global-shield-redis
+    region: frankfurt
+    plan: free
+    maxmemoryPolicy: allkeys-lru
