@@ -1,0 +1,23 @@
+# fly.toml — Backend Python (Cyber Global Shield API)
+# Généré automatiquement. Déploiement : fly deploy
+
+app = "cyber-shield-api"
+
+[build]
+  dockerfile = "Cyber Global Shield/Dockerfile"
+
+[env]
+  PORT = "8000"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false  # Ne dort jamais (important pour les APIs)
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
