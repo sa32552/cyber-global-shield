@@ -18,6 +18,7 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.core.supabase_client import supabase_manager
 
 logger = structlog.get_logger(__name__)
 
@@ -121,6 +122,7 @@ class AuthManager:
     """
     Authentication manager supporting multiple providers.
     Replaces hardcoded admin/cybershield2024 with proper auth.
+    Uses Supabase Auth for production, local fallback for development.
     """
 
     def __init__(self, config: Optional[AuthConfig] = None):
@@ -128,13 +130,13 @@ class AuthManager:
             jwt_secret=settings.SECRET_KEY,
             provider="local" if settings.ENVIRONMENT == "development" else "supabase",
         )
-        # In-memory user store for development (replace with Supabase in production)
+        # In-memory user store for development (fallback when Supabase unavailable)
         self._users: Dict[str, Dict] = {
             "admin": {
                 "id": "user-admin-001",
                 "username": "admin",
                 "email": "admin@cyberglobalshield.com",
-                "password": pwd_context.hash("Admin@2024Secure!"),  # Strong password
+                "password": pwd_context.hash("Admin@2024Secure!"),
                 "role": "admin",
                 "org_id": "global",
                 "permissions": ["*"],
@@ -176,8 +178,57 @@ class AuthManager:
     ) -> Optional[Dict[str, Any]]:
         """
         Authenticate user with username/password.
-        Returns token dict or None.
+        Delegates to Supabase Auth when provider is "supabase".
+        Falls back to local in-memory store for development.
         """
+        if self.config.provider == "supabase" and supabase_manager.client:
+            # ── Supabase Auth ──────────────────────────────────────────
+            try:
+                from supabase import create_client
+                # Use the anon key for client-side auth (sign in)
+                supabase_client = create_client(
+                    settings.SUPABASE_URL,
+                    settings.SUPABASE_KEY.get_secret_value() if settings.SUPABASE_KEY else "",
+                )
+                res = supabase_client.auth.sign_in_with_password(
+                    {"email": username, "password": password}
+                )
+                if not res.user:
+                    logger.warning("login_failed_supabase", username=username, ip=ip_address)
+                    return None
+
+                session = res.session
+                user_meta = res.user.user_metadata or {}
+
+                # Fetch profile from our profiles table
+                profile = await supabase_manager.get_profile(res.user.id)
+
+                role = profile.get("role", "analyst") if profile else user_meta.get("role", "analyst")
+                org_id = profile.get("org_id", "default") if profile else user_meta.get("org_id", "default")
+                permissions = profile.get("permissions", []) if profile else []
+
+                logger.info("login_success_supabase", username=res.user.email, role=role, ip=ip_address)
+
+                return {
+                    "access_token": session.access_token,
+                    "token_type": "bearer",
+                    "expires_in": 3600,
+                    "refresh_token": session.refresh_token,
+                    "user": {
+                        "id": res.user.id,
+                        "username": res.user.email,
+                        "email": res.user.email,
+                        "role": role,
+                        "org_id": org_id,
+                        "permissions": permissions,
+                    },
+                }
+            except Exception as e:
+                logger.error("supabase_auth_failed", error=str(e), ip=ip_address)
+                # Fall through to local auth as fallback
+                logger.warning("auth_fallback_to_local", username=username)
+
+        # ── Local Auth (development fallback) ──────────────────────────
         user = self._users.get(username)
         if not user:
             logger.warning("login_failed_user_not_found", username=username, ip=ip_address)
@@ -212,7 +263,7 @@ class AuthManager:
             "ip": ip_address,
         }
 
-        logger.info("login_success", username=username, role=user["role"], ip=ip_address)
+        logger.info("login_success_local", username=username, role=user["role"], ip=ip_address)
 
         return {
             "access_token": access_token,
@@ -230,7 +281,22 @@ class AuthManager:
         }
 
     async def authenticate_with_api_key(self, api_key: str) -> Optional[User]:
-        """Authenticate using API key."""
+        """Authenticate using API key. Checks Supabase first, then local store."""
+        # Try Supabase API key verification
+        if supabase_manager.client:
+            key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+            key_data = await supabase_manager.verify_api_key(key_hash)
+            if key_data:
+                return User(
+                    id=key_data["user_id"],
+                    username=key_data.get("email", "api-user"),
+                    email=key_data.get("email", ""),
+                    role=key_data.get("role", "analyst"),
+                    org_id=key_data.get("org_id", "default"),
+                    permissions=key_data.get("permissions", []),
+                )
+
+        # Local fallback
         key_data = self._api_keys.get(api_key)
         if not key_data:
             return None
@@ -248,6 +314,25 @@ class AuthManager:
 
     async def refresh_access_token(self, refresh_token: str) -> Optional[Dict[str, Any]]:
         """Refresh an access token using a refresh token."""
+        # Try Supabase refresh
+        if self.config.provider == "supabase" and supabase_manager.client:
+            try:
+                from supabase import create_client
+                supabase_client = create_client(
+                    settings.SUPABASE_URL,
+                    settings.SUPABASE_KEY.get_secret_value() if settings.SUPABASE_KEY else "",
+                )
+                res = supabase_client.auth.refresh_session(refresh_token)
+                if res.session:
+                    return {
+                        "access_token": res.session.access_token,
+                        "token_type": "bearer",
+                        "expires_in": 3600,
+                    }
+            except Exception as e:
+                logger.warning("supabase_refresh_failed", error=str(e))
+
+        # Local fallback
         token_data = self._refresh_tokens.get(refresh_token)
         if not token_data:
             return None
@@ -265,6 +350,18 @@ class AuthManager:
 
     async def revoke_token(self, refresh_token: str) -> bool:
         """Revoke a refresh token."""
+        # Try Supabase sign out
+        if self.config.provider == "supabase" and supabase_manager.client:
+            try:
+                from supabase import create_client
+                supabase_client = create_client(
+                    settings.SUPABASE_URL,
+                    settings.SUPABASE_KEY.get_secret_value() if settings.SUPABASE_KEY else "",
+                )
+                supabase_client.auth.sign_out()
+            except Exception:
+                pass
+
         if refresh_token in self._refresh_tokens:
             del self._refresh_tokens[refresh_token]
             return True
@@ -280,6 +377,19 @@ class AuthManager:
         """Generate a new API key."""
         api_key = f"cgs_{secrets.token_urlsafe(32)}"
         user = next((u for u in self._users.values() if u["id"] == user_id), None)
+
+        # Store in Supabase if available
+        if supabase_manager.client:
+            key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+            expires_at = (datetime.now(timezone.utc) + timedelta(days=expires_in_days)).isoformat()
+            await supabase_manager.store_api_key(
+                key_hash=key_hash,
+                user_id=user_id,
+                org_id=org_id,
+                expires_at=expires_at,
+            )
+
+        # Also store locally for fallback
         self._api_keys[api_key] = {
             "user_id": user_id,
             "username": user["username"] if user else "api",
@@ -292,7 +402,51 @@ class AuthManager:
         return api_key
 
     async def get_user_from_token(self, token: str) -> Optional[User]:
-        """Extract user from JWT token."""
+        """Extract user from JWT token. Supports both Supabase JWTs and local JWTs."""
+        # ── Try Supabase JWT verification first ────────────────────────
+        if self.config.provider == "supabase" and settings.SUPABASE_JWT_SECRET:
+            try:
+                supabase_jwt_secret = settings.SUPABASE_JWT_SECRET.get_secret_value()
+                if supabase_jwt_secret:
+                    payload = jwt.decode(
+                        token,
+                        supabase_jwt_secret,
+                        algorithms=["HS256"],
+                        options={"verify_aud": False},
+                    )
+                    user_id = payload.get("sub")
+                    if not user_id:
+                        return None
+
+                    # Fetch profile from Supabase
+                    profile = await supabase_manager.get_profile(user_id)
+                    if profile:
+                        return User(
+                            id=user_id,
+                            username=profile.get("full_name", payload.get("email", user_id)),
+                            email=payload.get("email", profile.get("email", "")),
+                            role=profile.get("role", "analyst"),
+                            org_id=profile.get("org_id", "default"),
+                            permissions=profile.get("permissions", []),
+                            is_active=True,
+                        )
+
+                    # If no profile yet, create a basic user from JWT claims
+                    user_metadata = payload.get("user_metadata", {})
+                    return User(
+                        id=user_id,
+                        username=user_metadata.get("full_name", payload.get("email", user_id)),
+                        email=payload.get("email", ""),
+                        role=user_metadata.get("role", "analyst"),
+                        org_id=user_metadata.get("org_id", "default"),
+                        permissions=[],
+                        is_active=True,
+                    )
+            except JWTError as e:
+                logger.debug("supabase_jwt_decode_failed", error=str(e))
+                # Fall through to local JWT verification
+
+        # ── Local JWT verification (fallback) ──────────────────────────
         try:
             payload = jwt.decode(
                 token,
@@ -376,7 +530,7 @@ async def get_current_user(
             return user
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    # Try JWT token
+    # Try JWT token (Supabase or local)
     user = await auth_manager.get_user_from_token(token_str)
     if user:
         return user

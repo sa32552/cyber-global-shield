@@ -5,7 +5,6 @@ Honeypots, tar pits, disinformation, and attribution
 """
 
 import asyncio
-import logging
 import hashlib
 import random
 import ipaddress
@@ -13,8 +12,9 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
+import structlog
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class CountermeasureType(Enum):

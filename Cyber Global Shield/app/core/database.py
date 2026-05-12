@@ -1,6 +1,8 @@
 """
 Database module: async SQLAlchemy engine with retry logic and health checks.
+Uses Supabase PostgreSQL for production, with local PostgreSQL fallback for dev.
 """
+
 from typing import AsyncGenerator, Optional, Dict, Any
 from datetime import datetime, timezone
 
@@ -20,12 +22,47 @@ from app.core.config import settings
 
 logger = structlog.get_logger(__name__)
 
-# Supabase uses PostgreSQL under the hood
-DATABASE_URL = (
-    settings.SUPABASE_URL.replace("https://", "postgresql+asyncpg://")
-    if settings.SUPABASE_URL
-    else "sqlite+aiosqlite:///./cyber_shield.db"
-)
+# ─── Database URL Construction ──────────────────────────────────────────────
+# Supabase PostgreSQL connection string is built from SUPABASE_URL
+# Format: postgresql+asyncpg://user:password@host:port/database
+
+def _build_database_url() -> str:
+    """Build PostgreSQL connection string from Supabase URL or env vars."""
+    supabase_url = settings.SUPABASE_URL
+
+    if supabase_url:
+        # Convert Supabase URL to PostgreSQL connection string
+        # Supabase URL format: https://project-ref.supabase.co
+        # PostgreSQL format: postgresql+asyncpg://postgres:[password]@db.project-ref.supabase.co:5432/postgres
+        project_ref = supabase_url.replace("https://", "").split(".")[0]
+        pg_password = ""
+        if settings.SUPABASE_KEY:
+            pg_password = settings.SUPABASE_KEY.get_secret_value()
+
+        return (
+            f"postgresql+asyncpg://postgres:{pg_password}"
+            f"@db.{project_ref}.supabase.co:5432/postgres"
+        )
+
+    # Fallback: use DATABASE_URL from environment or local PostgreSQL
+    import os as _os
+    env_db_url = _os.environ.get("DATABASE_URL")
+    if env_db_url:
+        # Ensure async driver
+        if env_db_url.startswith("postgresql://"):
+            return env_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return env_db_url
+
+    # Local development PostgreSQL (no SQLite fallback)
+    logger.warning(
+        "database_no_supabase_url",
+        message="No SUPABASE_URL configured. Using local PostgreSQL. "
+                "Set SUPABASE_URL for production deployments.",
+    )
+    return "postgresql+asyncpg://postgres:postgres@localhost:5432/cyber_shield"
+
+
+DATABASE_URL = _build_database_url()
 
 engine = create_async_engine(
     DATABASE_URL,
@@ -68,7 +105,6 @@ def is_retryable_error(exception: Exception) -> bool:
         "deadlock",
         "could not connect",
         "server closed connection",
-        "database is locked",  # SQLite specific
         "database connection",
         "operationalerror",
         "interfaceerror",

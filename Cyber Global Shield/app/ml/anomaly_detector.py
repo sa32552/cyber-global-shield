@@ -493,7 +493,307 @@ class AnomalyDetector:
         return self.threshold
 
 
-def create_default_detector() -> AnomalyDetector:
+# ═══════════════════════════════════════════════════════════════════════════
+# DIFFUSION MODEL FOR ANOMALY DETECTION (State-of-the-Art)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DiffusionAnomalyDetector:
+    """
+    Diffusion Model for anomaly detection.
+    
+    Utilise un Denoising Diffusion Probabilistic Model (DDPM) pour
+    détecter les anomalies par reconstruction après diffusion inverse.
+    
+    Principe :
+    1. Ajout de bruit gaussien aux données (forward diffusion)
+    2. Apprentissage du débruiteur (reverse diffusion)
+    3. Les anomalies ont une erreur de reconstruction élevée
+    """
+    
+    def __init__(
+        self,
+        input_dim: int = 128,
+        hidden_dim: int = 256,
+        num_timesteps: int = 100,
+        beta_start: float = 1e-4,
+        beta_end: float = 0.02,
+        device: Optional[torch.device] = None,
+    ):
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.num_timesteps = num_timesteps
+        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Noise schedule (linear)
+        self.betas = torch.linspace(beta_start, beta_end, num_timesteps, device=self.device)
+        self.alphas = 1.0 - self.betas
+        self.alpha_bars = torch.cumprod(self.alphas, dim=0)
+        
+        # U-Net like denoiser
+        self.denoiser = self._build_denoiser().to(self.device)
+        self.optimizer = torch.optim.AdamW(self.denoiser.parameters(), lr=1e-4, weight_decay=1e-5)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=1000)
+        
+        self.trained = False
+        self.threshold = 0.5
+        self.feature_names: Optional[List[str]] = None
+    
+    def _build_denoiser(self) -> nn.Module:
+        """Build U-Net like denoiser with time embedding."""
+        class TimeEmbedding(nn.Module):
+            def __init__(self, dim: int):
+                super().__init__()
+                self.dim = dim
+                self.mlp = nn.Sequential(
+                    nn.Linear(dim, dim * 4),
+                    nn.SiLU(),
+                    nn.Linear(dim * 4, dim),
+                )
+            
+            def forward(self, t: torch.Tensor) -> torch.Tensor:
+                half_dim = self.dim // 2
+                emb = torch.log(torch.tensor(10000.0)) / (half_dim - 1)
+                emb = torch.exp(torch.arange(half_dim, device=t.device) * -emb)
+                emb = t[:, None].float() * emb[None, :]
+                emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=-1)
+                return self.mlp(emb)
+        
+        class Denoiser(nn.Module):
+            def __init__(self, input_dim: int, hidden_dim: int, time_dim: int = 128):
+                super().__init__()
+                self.time_embed = TimeEmbedding(time_dim)
+                
+                # Encoder
+                self.enc1 = nn.Linear(input_dim + time_dim, hidden_dim)
+                self.enc2 = nn.Linear(hidden_dim, hidden_dim * 2)
+                self.enc3 = nn.Linear(hidden_dim * 2, hidden_dim * 2)
+                
+                # Bottleneck
+                self.bottleneck = nn.Sequential(
+                    nn.Linear(hidden_dim * 2, hidden_dim * 2),
+                    nn.SiLU(),
+                    nn.Dropout(0.1),
+                    nn.Linear(hidden_dim * 2, hidden_dim * 2),
+                )
+                
+                # Decoder
+                self.dec1 = nn.Linear(hidden_dim * 4, hidden_dim * 2)
+                self.dec2 = nn.Linear(hidden_dim * 2, hidden_dim)
+                self.dec3 = nn.Linear(hidden_dim, input_dim)
+                
+                self.norm1 = nn.LayerNorm(hidden_dim)
+                self.norm2 = nn.LayerNorm(hidden_dim * 2)
+                self.dropout = nn.Dropout(0.1)
+            
+            def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+                t_emb = self.time_embed(t)
+                
+                # Concatenate time embedding
+                t_expanded = t_emb.expand(x.shape[0], -1)
+                h = torch.cat([x, t_expanded], dim=-1)
+                
+                # Encoder
+                h1 = F.silu(self.enc1(h))
+                h1 = self.norm1(h1)
+                h2 = F.silu(self.enc2(h1))
+                h2 = self.norm2(h2)
+                h3 = F.silu(self.enc3(h2))
+                
+                # Bottleneck
+                h_bn = self.bottleneck(h3)
+                
+                # Decoder with skip connections
+                h = torch.cat([h_bn, h3], dim=-1)
+                h = F.silu(self.dec1(h))
+                h = self.dropout(h)
+                h = torch.cat([h, h2], dim=-1)
+                h = F.silu(self.dec2(h))
+                h = self.dropout(h)
+                h = self.dec3(h)
+                
+                return h
+        
+        return Denoiser(self.input_dim, self.hidden_dim)
+    
+    def _add_noise(self, x: torch.Tensor, timesteps: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Add noise to data according to diffusion schedule."""
+        noise = torch.randn_like(x)
+        sqrt_alpha_bar = torch.sqrt(self.alpha_bars[timesteps]).view(-1, 1)
+        sqrt_one_minus_alpha_bar = torch.sqrt(1.0 - self.alpha_bars[timesteps]).view(-1, 1)
+        noisy_x = sqrt_alpha_bar * x + sqrt_one_minus_alpha_bar * noise
+        return noisy_x, noise
+    
+    def train_step(self, x: torch.Tensor) -> Dict[str, float]:
+        """Single training step."""
+        self.denoiser.train()
+        self.optimizer.zero_grad()
+        
+        batch_size = x.shape[0]
+        timesteps = torch.randint(0, self.num_timesteps, (batch_size,), device=self.device)
+        
+        noisy_x, noise = self._add_noise(x, timesteps)
+        predicted_noise = self.denoiser(noisy_x, timesteps.float())
+        
+        loss = F.mse_loss(predicted_noise, noise)
+        
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.denoiser.parameters(), 1.0)
+        self.optimizer.step()
+        self.scheduler.step()
+        
+        return {"loss": loss.item(), "lr": self.scheduler.get_last_lr()[0]}
+    
+    def train(self, data: torch.Tensor, epochs: int = 100, batch_size: int = 64) -> Dict[str, Any]:
+        """Train the diffusion model."""
+        dataset = torch.utils.data.TensorDataset(data)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        
+        logger.info(f"Training Diffusion Model for {epochs} epochs...")
+        losses = []
+        
+        for epoch in range(epochs):
+            epoch_losses = []
+            for batch in dataloader:
+                x = batch[0].to(self.device)
+                loss_dict = self.train_step(x)
+                epoch_losses.append(loss_dict["loss"])
+            
+            avg_loss = np.mean(epoch_losses)
+            losses.append(avg_loss)
+            
+            if epoch % 10 == 0:
+                logger.info(f"Epoch {epoch}: loss={avg_loss:.6f}, lr={loss_dict['lr']:.6f}")
+        
+        self.trained = True
+        logger.info(f"Diffusion Model trained: final_loss={losses[-1]:.6f}")
+        
+        return {
+            "status": "trained",
+            "epochs": epochs,
+            "final_loss": losses[-1],
+            "loss_history": losses,
+        }
+    
+    @torch.no_grad()
+    def detect(self, x: torch.Tensor) -> AnomalyDetectionResult:
+        """
+        Detect anomalies using diffusion reconstruction.
+        Higher reconstruction error = more anomalous.
+        """
+        start_time = time.time()
+        
+        self.denoiser.eval()
+        x = x.to(self.device)
+        
+        # Forward diffusion to a moderate timestep
+        t = torch.full((x.shape[0],), self.num_timesteps // 2, device=self.device, dtype=torch.long)
+        noisy_x, _ = self._add_noise(x, t)
+        
+        # Reverse diffusion (denoise)
+        reconstructed = noisy_x.clone()
+        for timestep in range(t[0].item(), 0, -1):
+            t_tensor = torch.full((x.shape[0],), timestep, device=self.device, dtype=torch.float)
+            predicted_noise = self.denoiser(reconstructed, t_tensor)
+            
+            beta = self.betas[timestep - 1]
+            alpha = self.alphas[timestep - 1]
+            alpha_bar = self.alpha_bars[timestep - 1]
+            
+            if timestep > 1:
+                noise = torch.randn_like(reconstructed)
+            else:
+                noise = torch.zeros_like(reconstructed)
+            
+            reconstructed = (1 / torch.sqrt(alpha)) * (
+                reconstructed - (beta / torch.sqrt(1 - alpha_bar)) * predicted_noise
+            ) + torch.sqrt(beta) * noise
+        
+        # Compute reconstruction error
+        reconstruction_error = F.mse_loss(reconstructed, x, reduction='none').mean(dim=-1)
+        total_error = reconstruction_error.mean().item()
+        
+        # Feature-wise errors
+        feature_errors = F.mse_loss(reconstructed, x, reduction='none').mean(dim=0).cpu().numpy()
+        
+        # Anomaly score
+        anomaly_score = float(1.0 - torch.exp(-reconstruction_error.mean()).item())
+        is_anomaly = anomaly_score > self.threshold
+        
+        # Explanation
+        explanation = None
+        if is_anomaly and self.feature_names:
+            top_features = np.argsort(feature_errors)[-5:][::-1]
+            explanations = []
+            for idx in top_features:
+                if idx < len(self.feature_names):
+                    explanations.append(
+                        f"diffusion anomaly in {self.feature_names[idx]} "
+                        f"(err={feature_errors[idx]:.4f})"
+                    )
+            explanation = " | ".join(explanations[:3])
+        
+        feature_scores = {}
+        if self.feature_names:
+            for i, name in enumerate(self.feature_names[:len(feature_errors)]):
+                feature_scores[name] = float(feature_errors[i])
+        
+        inference_time = (time.time() - start_time) * 1000
+        
+        return AnomalyDetectionResult(
+            anomaly_score=anomaly_score,
+            reconstruction_error=total_error,
+            is_anomaly=is_anomaly,
+            threshold_used=self.threshold,
+            feature_scores=feature_scores if feature_scores else None,
+            explanation=explanation,
+            inference_time_ms=inference_time,
+        )
+    
+    def calibrate_threshold(self, normal_data: torch.Tensor, percentile: float = 95.0) -> float:
+        """Calibrate threshold using normal data."""
+        scores = []
+        for i in range(0, len(normal_data), 64):
+            batch = normal_data[i:i+64].to(self.device)
+            result = self.detect(batch)
+            scores.append(result.anomaly_score)
+        
+        self.threshold = float(np.percentile(scores, percentile))
+        logger.info(f"Diffusion threshold calibrated: {self.threshold:.4f} (p{percentile})")
+        return self.threshold
+    
+    def generate_samples(self, num_samples: int = 10) -> torch.Tensor:
+        """Generate synthetic samples using the diffusion model (reverse process)."""
+        self.denoiser.eval()
+        
+        # Start from pure noise
+        samples = torch.randn(num_samples, self.input_dim, device=self.device)
+        
+        # Reverse diffusion
+        for timestep in range(self.num_timesteps - 1, 0, -1):
+            t_tensor = torch.full((num_samples,), timestep, device=self.device, dtype=torch.float)
+            predicted_noise = self.denoiser(samples, t_tensor)
+            
+            beta = self.betas[timestep - 1]
+            alpha = self.alphas[timestep - 1]
+            alpha_bar = self.alpha_bars[timestep - 1]
+            
+            if timestep > 1:
+                noise = torch.randn_like(samples)
+            else:
+                noise = torch.zeros_like(samples)
+            
+            samples = (1 / torch.sqrt(alpha)) * (
+                samples - (beta / torch.sqrt(1 - alpha_bar)) * predicted_noise
+            ) + torch.sqrt(beta) * noise
+        
+        return samples.cpu()
+
+
+def create_default_detector(use_diffusion: bool = False) -> Union[AnomalyDetector, DiffusionAnomalyDetector]:
     """Create a detector with sensible defaults."""
+    if use_diffusion:
+        detector = DiffusionAnomalyDetector()
+        logger.info("Created DiffusionAnomalyDetector (state-of-the-art)")
+        return detector
     detector = AnomalyDetector(use_isolation_forest=True)
     return detector

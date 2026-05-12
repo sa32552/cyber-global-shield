@@ -15,6 +15,12 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - FLOWER_SERVER_ADDRESS=fl-server:8080
       - RAY_ADDRESS=ray-head:6379
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       kafka:
         condition: service_healthy
@@ -37,8 +43,15 @@ services:
       - ./vector.yaml:/etc/vector/vector.yaml:ro
     ports:
       - "9000:9000"
+    healthcheck:
+      test: ["CMD", "vector", "top", "--once"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - cyber-shield
@@ -134,6 +147,12 @@ services:
     ports:
       - "6379:6379"
       - "8265:8265"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ray; ray.init(address='auto', ignore_reinit_error=True)"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     volumes:
       - ray_data:/tmp/ray
     restart: unless-stopped
@@ -145,7 +164,8 @@ services:
     container_name: cyber-shield-ray-worker
     command: ray start --address=ray-head:6379 --num-cpus=4
     depends_on:
-      - ray-head
+      ray-head:
+        condition: service_healthy
     volumes:
       - ray_data:/tmp/ray
     restart: unless-stopped
@@ -161,8 +181,15 @@ services:
     command: python -m app.fl.federated_server
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(5); s.connect(('localhost',8080)); s.close()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - cyber-shield
@@ -177,6 +204,12 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: cybershield
       GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-worldmap-panel
+    healthcheck:
+      test: ["CMD", "wget", "-O", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     volumes:
       - grafana_data:/var/lib/grafana
       - ./infra/docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
@@ -190,6 +223,12 @@ services:
     container_name: cyber-shield-prometheus
     ports:
       - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-O", "/dev/null", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     volumes:
       - ./infra/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
@@ -241,6 +280,12 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - ZEEK_LOG_DIR=/usr/local/zeek/logs/current
       - SURICATA_EVE_PATH=/var/log/suricata/eve.json
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; assert os.path.exists('/app/app/ingestion/log_watcher.py')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     volumes:
       - zeek_logs:/usr/local/zeek/logs:ro
       - suricata_logs:/var/log/suricata:ro
@@ -264,6 +309,12 @@ services:
       MISP_BASEURL: https://localhost:8443
       MISP_ADMIN_EMAIL: admin@cybershield.io
       MISP_ADMIN_PASSPHRASE: CyberShield2024!
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     volumes:
       - misp_data:/var/www/MISP
     restart: unless-stopped

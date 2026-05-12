@@ -21,7 +21,6 @@ Technologies intégrées :
 """
 
 import asyncio
-import logging
 import hashlib
 import time
 import random
@@ -32,8 +31,9 @@ from typing import Dict, List, Optional, Any, Set, Tuple, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from collections import Counter, defaultdict
+import structlog
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # ─── ML Libraries ─────────────────────────────────────────────────────────
 try:
