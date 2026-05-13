@@ -3,6 +3,7 @@ Database module: async SQLAlchemy engine with retry logic and health checks.
 Uses Supabase PostgreSQL for production, with local PostgreSQL fallback for dev.
 """
 
+import logging
 from typing import AsyncGenerator, Optional, Dict, Any
 from datetime import datetime, timezone
 
@@ -118,7 +119,7 @@ def is_retryable_error(exception: Exception) -> bool:
     stop=stop_after_attempt(DB_RETRY_ATTEMPTS),
     wait=wait_exponential(multiplier=DB_RETRY_MIN_WAIT, max=DB_RETRY_MAX_WAIT),
     retry=retry_if_exception_type(Exception),
-    before_sleep=before_sleep_log(logger, structlog.get_log_level()),
+    before_sleep=before_sleep_log(logger, logging.INFO),
     reraise=True,
 )
 async def init_db():
