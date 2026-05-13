@@ -108,7 +108,7 @@ async def general_exception_handler(request, exc):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "app:app",
+        "server:app",
         host=settings.HOST if hasattr(settings, 'HOST') else "0.0.0.0",
         port=settings.PORT if hasattr(settings, 'PORT') else 8000,
         reload=settings.DEBUG if hasattr(settings, 'DEBUG') else False,

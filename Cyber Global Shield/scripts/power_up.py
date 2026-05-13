@@ -255,7 +255,7 @@ def start_api():
     """Démarre l'API en mode production."""
     print("\n  🚀 Démarrage de l'API Cyber Global Shield...\n")
     os.chdir(ROOT)
-    subprocess.run([sys.executable, "app.py"])
+    subprocess.run([sys.executable, "server.py"])
 
 
 def main():
@@ -301,7 +301,7 @@ def main():
      📊 py-spy + memray → Profiling avancé
 
   🚀 Pour démarrer l'API :
-     python app.py
+     python server.py
 
   🧪 Pour relancer les tests :
      pytest test_breach.py -v
