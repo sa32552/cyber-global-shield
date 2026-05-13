@@ -120,13 +120,17 @@ def is_retryable_error(exception: Exception) -> bool:
     wait=wait_exponential(multiplier=DB_RETRY_MIN_WAIT, max=DB_RETRY_MAX_WAIT),
     retry=retry_if_exception_type(Exception),
     before_sleep=before_sleep_log(logger, logging.INFO),
-    reraise=True,
+    reraise=False,
 )
 async def init_db():
-    """Initialize database tables with retry logic."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("database_initialized", url=DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else "local")
+    """Initialize database tables with retry logic. Does not raise on failure."""
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("database_initialized", url=DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else "local")
+    except Exception as e:
+        logger.error("database_init_failed", error=str(e))
+        logger.warning("database_init_skipped", message="Database unavailable. App will start without DB. Set SUPABASE_URL for production.")
 
 
 # ─── Session management ─────────────────────────────────────────────────
