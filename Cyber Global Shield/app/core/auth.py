@@ -126,8 +126,10 @@ class AuthManager:
     """
 
     def __init__(self, config: Optional[AuthConfig] = None):
+        # Convert SecretStr to str for AuthConfig
+        secret_key = settings.SECRET_KEY.get_secret_value() if hasattr(settings.SECRET_KEY, 'get_secret_value') else str(settings.SECRET_KEY)
         self.config = config or AuthConfig(
-            jwt_secret=settings.SECRET_KEY,
+            jwt_secret=secret_key,
             provider="local" if settings.ENVIRONMENT == "development" else "supabase",
         )
         # In-memory user store for development (fallback when Supabase unavailable)

@@ -184,13 +184,15 @@ def create_access_token(
     if extra_claims:
         to_encode.update(extra_claims)
 
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    secret_key = settings.SECRET_KEY.get_secret_value() if hasattr(settings.SECRET_KEY, 'get_secret_value') else str(settings.SECRET_KEY)
+    return jwt.encode(to_encode, secret_key, algorithm=settings.ALGORITHM)
 
 
 def verify_token(token: str) -> TokenPayload:
     try:
+        secret_key = settings.SECRET_KEY.get_secret_value() if hasattr(settings.SECRET_KEY, 'get_secret_value') else str(settings.SECRET_KEY)
         payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+            token, secret_key, algorithms=[settings.ALGORITHM]
         )
         token_data = TokenPayload(
             sub=payload.get("sub", ""),
