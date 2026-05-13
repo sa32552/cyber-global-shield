@@ -17,7 +17,7 @@ from app.core.security import create_access_token, verify_token, get_current_use
 # =============================================================================
 # Infrastructure modules — these are core and should load directly
 # =============================================================================
-from app.core.auth import auth_handler, AuthHandler
+from app.core.auth import auth_manager, AuthHandler
 from app.core.middleware import setup_middleware
 from app.core.websocket_manager import websocket_manager, WebSocketManager
 from app.core.webhooks import webhook_manager, WebhookManager
@@ -455,7 +455,7 @@ __all__ = [
     "security_dashboard_api", "SecurityDashboardAPI",
     "performance_optimizer", "PerformanceOptimizer",
     # Infrastructure
-    "auth_handler", "AuthHandler",
+    "auth_manager", "AuthHandler",
     "setup_middleware",
     "websocket_manager", "WebSocketManager",
     "webhook_manager", "WebhookManager",
