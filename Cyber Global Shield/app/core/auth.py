@@ -133,12 +133,15 @@ class AuthManager:
             provider="local" if settings.ENVIRONMENT == "development" else "supabase",
         )
         # In-memory user store for development (fallback when Supabase unavailable)
+        # NOTE: bcrypt 4.1+ raises ValueError for passwords >72 bytes, so we truncate
+        def _hash_pw(pw: str) -> str:
+            return pwd_context.hash(pw[:72])
         self._users: Dict[str, Dict] = {
             "admin": {
                 "id": "user-admin-001",
                 "username": "admin",
                 "email": "admin@cyberglobalshield.com",
-                "password": pwd_context.hash("Admin@2024Secure!"),
+                "password": _hash_pw("Admin@2024Secure!"),
                 "role": "admin",
                 "org_id": "global",
                 "permissions": ["*"],
@@ -149,7 +152,7 @@ class AuthManager:
                 "id": "user-analyst-001",
                 "username": "analyst",
                 "email": "analyst@cyberglobalshield.com",
-                "password": pwd_context.hash("Analyst@2024Secure!"),
+                "password": _hash_pw("Analyst@2024Secure!"),
                 "role": "analyst",
                 "org_id": "org-a",
                 "permissions": ["alerts:read", "dashboard:read", "soar:execute"],
@@ -160,7 +163,7 @@ class AuthManager:
                 "id": "user-soc-001",
                 "username": "soc_engineer",
                 "email": "soc@cyberglobalshield.com",
-                "password": pwd_context.hash("SOC@2024Secure!"),
+                "password": _hash_pw("SOC@2024Secure!"),
                 "role": "soc_engineer",
                 "org_id": "org-a",
                 "permissions": ["alerts:*", "dashboard:*", "soar:*", "ml:detect"],

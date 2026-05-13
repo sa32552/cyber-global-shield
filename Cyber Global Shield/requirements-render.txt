@@ -29,6 +29,7 @@ sqlalchemy[asyncio]>=2.0.25
 # Utilities
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+bcrypt<4.1  # passlib incompatibility with bcrypt 4.1+ (72-byte check)
 python-dotenv>=1.0.0
 pyyaml>=6.0.1
 structlog>=24.1.0
