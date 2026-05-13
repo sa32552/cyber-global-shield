@@ -16,7 +16,7 @@ from app.core.config import settings
 from app.core.database import init_db
 from app.ingestion.pipeline import get_pipeline
 from app.soar.playbook_engine import get_soar
-from app.core.websocket_manager import websocket_manager
+from app.core.websocket_manager import ws_manager as websocket_manager
 from app.core.rate_limiter import rate_limit_middleware
 from app.routes import api_router
 

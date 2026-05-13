@@ -17,17 +17,55 @@ from app.core.security import create_access_token, verify_token, get_current_use
 # =============================================================================
 # Infrastructure modules — these are core and should load directly
 # =============================================================================
-from app.core.auth import auth_manager, AuthHandler
+from app.core.auth import auth_manager, AuthManager as AuthHandler
 from app.core.middleware import setup_middleware
-from app.core.websocket_manager import websocket_manager, WebSocketManager
+from app.core.websocket_manager import ws_manager as websocket_manager, ConnectionManager as WebSocketManager
 from app.core.webhooks import webhook_manager, WebhookManager
-from app.core.tenant import tenant_manager, TenantManager
-from app.core.pagination import paginate
 from app.core.notifications import notification_manager, NotificationManager
-from app.core.export import export_manager, ExportManager
-from app.core.search import search_engine, SearchEngine
-from app.core.sso import sso_handler, SSOHandler
 from app.core.llm_cost_monitor import llm_cost_monitor, LLMCostMonitor
+
+# =============================================================================
+# Optional infrastructure — wrapped in try/except for startup resilience
+# =============================================================================
+
+# Tenant
+try:
+    from app.core.tenant import TenantContext as tenant_manager, TenantFilter as TenantManager
+except ImportError as e:
+    logger.warning("Failed to import tenant module: %s", e)
+    tenant_manager = None
+    TenantManager = None
+
+# Pagination
+try:
+    from app.core.pagination import Paginator as paginate
+except ImportError as e:
+    logger.warning("Failed to import pagination module: %s", e)
+    paginate = None
+
+# Export
+try:
+    from app.core.export import export_service as export_manager, ExportService as ExportManager
+except ImportError as e:
+    logger.warning("Failed to import export module: %s", e)
+    export_manager = None
+    ExportManager = None
+
+# Search
+try:
+    from app.core.search import search_service as search_engine, SearchService as SearchEngine
+except ImportError as e:
+    logger.warning("Failed to import search module: %s", e)
+    search_engine = None
+    SearchEngine = None
+
+# SSO
+try:
+    from app.core.sso import SSOService as sso_handler, SSOService as SSOHandler
+except ImportError as e:
+    logger.warning("Failed to import sso module: %s", e)
+    sso_handler = None
+    SSOHandler = None
 
 # =============================================================================
 # Security Modules — wrapped in try/except to prevent startup crashes
@@ -455,7 +493,7 @@ __all__ = [
     "security_dashboard_api", "SecurityDashboardAPI",
     "performance_optimizer", "PerformanceOptimizer",
     # Infrastructure
-    "auth_manager", "AuthHandler",
+    "auth_manager", "AuthManager",
     "setup_middleware",
     "websocket_manager", "WebSocketManager",
     "webhook_manager", "WebhookManager",
